@@ -414,7 +414,7 @@ export default function HeroSection() {
               transition={{ duration: 0.6, delay: 0.4 }}
               style={{ display: "flex", gap: "1rem", marginTop: "2rem", flexWrap: "wrap" }}
             >
-              <Link href="/login">
+              <Link href="/Login">
                 <div className="zeno-btn-primary">
                   Go to Dashboard
                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -422,7 +422,7 @@ export default function HeroSection() {
                   </svg>
                 </div>
               </Link>
-<Link href="/login">
+<Link href="/Login">
               <div className="zeno-btn-secondary">Learn More</div>
 </Link>            </motion.div>
 
