@@ -10,58 +10,51 @@ export async function POST(req: NextRequest) {
   try {
     await connectDB();
 
-    const { mobile, password } = await req.json();
+    const { userCode, password } = await req.json();
 
-    // Validation
-    if (!mobile || !password) {
+    if (!userCode || !password) {
       return NextResponse.json(
-        { success: false, message: "Mobile and password are required!" },
+        { success: false, message: "User Code and password are required!" },
         { status: 400 }
       );
     }
 
-    // 🔥 MUST INCLUDE PASSWORD
-    const user = await User.findOne({ mobile: mobile.trim() }).select("+password");
+    const user = await User.findOne({ userCode: userCode.trim().toUpperCase() }).select("+password");
 
     if (!user) {
       return NextResponse.json(
-        { success: false, message: "Invalid mobile or password!" },
+        { success: false, message: "Invalid User Code or password!" },
         { status: 401 }
       );
     }
 
-    // Password check
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
       return NextResponse.json(
-        { success: false, message: "Invalid mobile or password!" },
+        { success: false, message: "Invalid User Code or password!" },
         { status: 401 }
       );
     }
 
-    // Generate JWT token
     const token = jwt.sign(
       {
         userId: user._id,
-        mobile: user.mobile,
+        userCode: user.userCode,
         name: user.name,
       },
       JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    // User data to return
     const userResponse = {
       _id: user._id,
       name: user.name,
       mobile: user.mobile,
       email: user.email,
-      policeStation: user.policeStation,
+      userCode: user.userCode,
       walletName: user.walletName,
       walletAddress: user.walletAddress,
-      paymentScreenshot: user.paymentScreenshot,
-      secretKey: user.secretKey,
       referralToken: user.referralToken,
       parentId: user.parentId,
       children: user.children,
@@ -72,10 +65,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "Login successful!",
-      data: {
-        user: userResponse,
-        token,
-      },
+      data: { user: userResponse, token },
     });
 
   } catch (error) {

@@ -1,304 +1,334 @@
-// app/join/[referralToken]/page.tsx
 "use client";
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Loader2, UserPlus, Lock, Phone, AlertCircle, CheckCircle } from "lucide-react";
+import {
+  Loader2, UserPlus, Phone, AlertCircle,
+  CheckCircle, Mail, CreditCard, User, Copy, AlertTriangle
+} from "lucide-react";
+
+interface ReferrerInfo { name: string; userCode: string }
+interface SuccessData  { userCode: string; name: string }
 
 export default function JoinReferralForm() {
-  const [loading, setLoading] = useState(false);
+  const [loading,       setLoading]       = useState(false);
+  const [validating,    setValidating]    = useState(true);
+  const [referralToken, setReferralToken] = useState("");
+  const [referrerInfo,  setReferrerInfo]  = useState<ReferrerInfo | null>(null);
+  const [successData,   setSuccessData]   = useState<SuccessData  | null>(null);
+  const [copied,        setCopied]        = useState(false);
+  const [error,         setError]         = useState("");
   const [form, setForm] = useState({
-    mobile: "",
-    password: "",
-    confirmPassword: ""
+    name: "", mobile: "", email: "", pan: "",
   });
-  const [message, setMessage] = useState({ type: "", text: "" });
-  const [referralToken, setReferralToken] = useState<string>("");
-  const [validating, setValidating] = useState(true);
-  const [referrerInfo, setReferrerInfo] = useState<{ name: string; mobile: string } | null>(null);
-  
+
   const params = useParams();
   const router = useRouter();
 
   useEffect(() => {
-    const validateReferralLink = async () => {
+    (async () => {
+      if (!params?.referralToken) { setValidating(false); return; }
+      const token = params.referralToken as string;
+      setReferralToken(token);
       try {
-        if (params?.referralToken) {
-          const token = params.referralToken as string;
-          setReferralToken(token);
-          
-          // Fetch referrer info
-          const response = await fetch(`/api/users/referrer/${token}`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success) {
-              setReferrerInfo(data.data);
-            }
-          }
-          
-          setValidating(false);
-        } else {
-          setMessage({ 
-            type: "error", 
-            text: "Invalid referral link. Missing referral token!" 
-          });
-          setValidating(false);
-        }
-      } catch (error) {
-        console.error("Error validating referral:", error);
-        setValidating(false);
-      }
-    };
-
-    validateReferralLink();
+        const res  = await fetch(`/api/users/referrer/${token}`);
+        const data = await res.json();
+        if (data.success) setReferrerInfo(data.data);
+      } catch {}
+      setValidating(false);
+    })();
   }, [params]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(f => ({ ...f, [k]: k === "pan" ? e.target.value.toUpperCase() : e.target.value }));
+
+  const validate = () => {
+    if (!form.name.trim())
+      return "Full name is required";
+    if (!/^\d{10}$/.test(form.mobile))
+      return "Enter a valid 10-digit mobile number";
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+      return "Enter a valid email address";
+    if (form.pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan))
+      return "PAN format: ABCDE1234F";
+    return null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validation
-    if (!form.mobile.match(/^\d{10}$/)) {
-      setMessage({ type: "error", text: "Please enter a valid 10-digit mobile number" });
-      return;
-    }
-    
-    if (form.password.length < 6) {
-      setMessage({ type: "error", text: "Password must be at least 6 characters" });
-      return;
-    }
-    
-    if (form.password !== form.confirmPassword) {
-      setMessage({ type: "error", text: "Passwords do not match" });
-      return;
-    }
-
+    const err = validate();
+    if (err) { setError(err); return; }
+    setError("");
+    setLoading(true);
     try {
-      setLoading(true);
-      setMessage({ type: "", text: "" });
-      
-      const response = await fetch(`/api/join/${referralToken}`, {
-        method: "POST",
+      // No password sent — backend will set default 123456
+      const res  = await fetch(`/api/join/${referralToken}`, {
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body:    JSON.stringify({ ...form, pan: form.pan.toUpperCase() }),
       });
-
-      const data = await response.json();
-      
+      const data = await res.json();
       if (data.success) {
-        setMessage({ 
-          type: "success", 
-          text: "🎉 Registration successful! Redirecting to login..." 
+        setSuccessData({
+          userCode: data.data.userCode,
+          name:     data.data.name,
         });
-        
-        // Clear form
-        setForm({
-          mobile: "",
-          password: "",
-          confirmPassword: ""
-        });
-        
-        // Redirect to login after 2 seconds
-        setTimeout(() => {
-          router.push("Login");
-        }, 2000);
       } else {
-        setMessage({ type: "error", text: data.message || "Registration failed!" });
+        setError(data.message || "Registration failed!");
       }
-    } catch (err) {
-      setMessage({ type: "error", text: "Network error! Please try again." });
-      console.error(err);
+    } catch {
+      setError("Network error! Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (validating) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-100 dark:from-slate-900 dark:to-slate-800">
-        <div className="text-center">
-          <Loader2 className="animate-spin h-12 w-12 text-blue-600 dark:text-blue-400 mx-auto mb-4" />
-          <p className="text-gray-600 dark:text-gray-400">Validating referral link...</p>
-        </div>
-      </div>
-    );
-  }
+  const copyCode = () => {
+    if (!successData?.userCode) return;
+    navigator.clipboard.writeText(successData.userCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
-  if (!referralToken) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-100 dark:from-slate-900 dark:to-slate-800 px-4">
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-4">Invalid Referral Link</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">The referral link you used is invalid or has expired.</p>
-          <a 
-            href="/login" 
-            className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition"
-          >
-            Go to Login
-          </a>
-        </div>
-      </div>
-    );
-  }
+  const inp      = "w-full pl-9 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-white/25 focus:outline-none focus:border-amber-400/50 transition-all";
+  const iconWrap = "absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none";
 
+  // ── Loading ────────────────────────────────────────────────────────────────
+  if (validating) return (
+    <Shell>
+      <div className="flex flex-col items-center gap-3 py-16">
+        <div className="w-10 h-10 border-4 border-t-transparent border-amber-400 rounded-full animate-spin" />
+        <p className="text-xs text-white/40 uppercase tracking-widest">Validating link…</p>
+      </div>
+    </Shell>
+  );
+
+  // ── Invalid link ───────────────────────────────────────────────────────────
+  if (!referralToken) return (
+    <Shell>
+      <div className="flex flex-col items-center gap-4 py-14 text-center">
+        <AlertCircle className="w-12 h-12 text-red-400" />
+        <p className="font-bold text-white text-lg">Invalid Referral Link</p>
+        <p className="text-sm text-white/50">This link is invalid or has expired.</p>
+        <a href="/login" className="mt-2 px-5 py-2.5 bg-amber-500 rounded-xl text-sm font-semibold text-white">
+          Go to Login
+        </a>
+      </div>
+    </Shell>
+  );
+
+  // ── Success screen ─────────────────────────────────────────────────────────
+  if (successData) return (
+    <Shell>
+      <div className="flex flex-col items-center text-center gap-4 py-6 px-2">
+
+        <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+          <CheckCircle className="w-8 h-8 text-emerald-400" />
+        </div>
+
+        <div>
+          <p className="text-xl font-bold text-white">
+            Welcome, {successData.name.split(" ")[0]}! 🎉
+          </p>
+          <p className="text-sm text-white/50 mt-1">Account created successfully.</p>
+        </div>
+
+        {/* User code box */}
+        <div className="w-full bg-amber-500/10 border border-amber-400/30 rounded-2xl p-4">
+          <p className="text-xs text-amber-400/70 uppercase tracking-widest mb-1">Your Unique User ID</p>
+          <p className="text-4xl font-black text-amber-400 tracking-widest font-mono">
+            {successData.userCode}
+          </p>
+          <p className="text-xs text-white/35 mt-1">Login ID · Referral ID</p>
+        </div>
+
+        {/* Password info */}
+        <div className="w-full flex gap-2.5 items-start bg-blue-500/10 border border-blue-400/20 rounded-xl px-3.5 py-3 text-left">
+          <AlertTriangle className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-blue-300 leading-relaxed">
+            For your login password, please <strong className="text-blue-300">contact your head</strong>.
+          </p>
+        </div>
+
+        {/* Save ID warning */}
+        <div className="w-full flex gap-2.5 items-start bg-red-500/10 border border-red-400/20 rounded-xl px-3.5 py-3 text-left">
+          <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-red-300 leading-relaxed">
+            <strong>Save this ID now.</strong> It is your only way to log in.
+            You cannot recover it later — note it down immediately.
+          </p>
+        </div>
+
+        <button
+          onClick={copyCode}
+          className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-400 rounded-xl font-semibold text-sm text-white transition-all"
+        >
+          <Copy className="w-4 h-4" />
+          {copied ? "Copied!" : `Copy ID: ${successData.userCode}`}
+        </button>
+
+        <button
+          onClick={() => router.push("/login")}
+          className="w-full py-2.5 border border-white/10 rounded-xl text-sm text-white/70 hover:bg-white/5 transition-all"
+        >
+          Go to Login →
+        </button>
+      </div>
+    </Shell>
+  );
+
+  // ── Main form ──────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-100 dark:from-slate-900 dark:to-slate-800 px-4 py-8">
-      <div className="w-full max-w-md">
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl p-8 border border-gray-200 dark:border-slate-700">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full mb-4">
-              <UserPlus className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-500 dark:to-indigo-500 bg-clip-text text-transparent mb-2">
-              Join Network
-            </h1>
-            
-            {referrerInfo && (
-              <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-lg border border-blue-100 dark:border-blue-800/30">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">You are joining under:</p>
-                <p className="font-semibold text-gray-800 dark:text-white">{referrerInfo.name}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">{referrerInfo.mobile}</p>
-              </div>
-            )}
-            
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Register with just your mobile number
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-              You can update other details later in your profile
-            </p>
+    <Shell>
+      {/* Referrer badge */}
+      {referrerInfo && (
+        <div className="flex items-center gap-3 px-3 py-2.5 mb-3 bg-white/5 border border-white/10 rounded-xl">
+          <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-300 font-bold text-xs flex-shrink-0">
+            {referrerInfo.name.charAt(0)}
           </div>
+          <div className="min-w-0">
+            <p className="text-xs text-white/40">Referred by</p>
+            <p className="text-sm font-semibold text-white truncate">{referrerInfo.name}</p>
+            <p className="text-xs text-amber-400 font-mono">{referrerInfo.userCode}</p>
+          </div>
+        </div>
+      )}
 
-          {/* Message Display */}
-          {message.text && (
-            <div
-              className={`mb-6 p-4 rounded-lg text-sm font-medium ${
-                message.type === "success"
-                  ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800"
-                  : "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800"
-              }`}
-            >
-              <div className="flex items-start gap-2">
-                {message.type === "success" ? (
-                  <CheckCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-                ) : (
-                  <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-                )}
-                <span>{message.text}</span>
-              </div>
+      {/* Form card */}
+      <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="h-[3px] bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500" />
+        <div className="p-5">
+
+          {/* Error banner */}
+          {error && (
+            <div className="flex gap-2 items-start mb-4 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5">
+              <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-red-300">{error}</p>
             </div>
           )}
 
-          {/* Registration Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                <Phone className="w-4 h-4" />
-                Mobile Number *
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <span className="text-gray-500 dark:text-gray-400">+91</span>
-                </div>
+          <form onSubmit={handleSubmit} className="space-y-3">
+
+            {/* Full name */}
+            <Field label="Full Name *">
+              <User className={iconWrap} />
+              <input
+                className={inp}
+                placeholder="Your full name"
+                value={form.name}
+                onChange={set("name")}
+                required
+              />
+            </Field>
+
+            {/* Mobile + PAN */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <Field label="Mobile *">
+                <Phone className={iconWrap} />
                 <input
-                  name="mobile"
+                  className={inp}
+                  placeholder="10 digits"
                   type="tel"
-                  placeholder="10-digit mobile number"
-                  required
-                  value={form.mobile}
-                  onChange={handleChange}
                   maxLength={10}
-                  className="w-full pl-12 pr-4 py-3 border border-gray-300 dark:border-slate-600 dark:bg-slate-700/50 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  value={form.mobile}
+                  onChange={set("mobile")}
+                  required
                 />
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                This will be your login ID
+              </Field>
+              <Field label="PAN">
+                <CreditCard className={iconWrap} />
+                <input
+                  className={`${inp} uppercase font-mono tracking-wider`}
+                  placeholder="ABCDE1234F"
+                  maxLength={10}
+                  value={form.pan}
+                  onChange={set("pan")}
+                />
+              </Field>
+            </div>
+
+            {/* Email */}
+            <Field label="Email">
+              <Mail className={iconWrap} />
+              <input
+                className={inp}
+                placeholder="your@email.com (optional)"
+                type="email"
+                value={form.email}
+                onChange={set("email")}
+              />
+            </Field>
+
+            {/* Password contact notice */}
+            <div className="flex gap-2 items-start bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2.5">
+              <AlertCircle className="w-3.5 h-3.5 text-blue-400 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-blue-300/80 leading-relaxed">
+                For your login password, please{" "}
+                <strong className="text-blue-300">contact your head</strong>. You will
+                also receive a unique{" "}
+                <strong className="text-blue-300">User Code</strong> (e.g. ZENO001) which
+                is your Login ID and Referral ID — save it carefully.
               </p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                <Lock className="w-4 h-4" />
-                Password *
-              </label>
-              <input
-                name="password"
-                type="password"
-                placeholder="Minimum 6 characters"
-                required
-                value={form.password}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 dark:bg-slate-700/50 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                <Lock className="w-4 h-4" />
-                Confirm Password *
-              </label>
-              <input
-                name="confirmPassword"
-                type="password"
-                placeholder="Confirm your password"
-                required
-                value={form.confirmPassword}
-                onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 dark:bg-slate-700/50 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-              />
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3.5 rounded-lg transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="animate-spin h-5 w-5" />
-                    Creating Account...
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="w-5 h-5" />
-                    Join Network
-                  </>
-                )}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-semibold text-sm text-white transition-all shadow-lg shadow-amber-500/20"
+            >
+              {loading
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating Account…</>
+                : <><UserPlus className="w-4 h-4" /> Create Account</>
+              }
+            </button>
           </form>
 
-          {/* Info Box */}
-          <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-100 dark:border-blue-800/30">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-300 mb-1">
-                  Additional Information
-                </p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  You can add your name, email, police station, and wallet details later in your profile settings after login.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Already have an account?{" "}
-              <a href="Login" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold">
-                Login here
-              </a>
-            </p>
-          </div>
+          <p className="text-center text-xs text-white/35 mt-4">
+            Already have an account?{" "}
+            <a href="/login" className="text-amber-400 hover:text-amber-300 font-semibold">
+              Login here
+            </a>
+          </p>
         </div>
       </div>
+    </Shell>
+  );
+}
+
+// ── Shell ──────────────────────────────────────────────────────────────────────
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center px-4 py-8"
+      style={{ background: "linear-gradient(135deg,#0f0c29 0%,#1a1650 50%,#0f0c29 100%)" }}
+    >
+      <div className="fixed top-16 left-8 w-56 h-56 bg-purple-700/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed bottom-16 right-8 w-56 h-56 bg-amber-500/8 rounded-full blur-3xl pointer-events-none" />
+      <div className="w-full max-w-sm relative z-10">
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className="w-9 h-9 bg-amber-500 rounded-xl flex items-center justify-center rotate-3 shadow-lg shadow-amber-500/25">
+            <UserPlus className="w-4 h-4 text-white" strokeWidth={2.5} />
+          </div>
+          <div>
+            <p className="text-lg font-black text-white leading-none">
+              Join <span className="text-amber-400">ZENO</span>
+            </p>
+            <p className="text-xs text-white/35">Create your investment account</p>
+          </div>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Field wrapper ──────────────────────────────────────────────────────────────
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="block text-[10px] font-semibold text-white/40 uppercase tracking-widest">
+        {label}
+      </label>
+      <div className="relative">{children}</div>
     </div>
   );
 }

@@ -22,10 +22,9 @@ export async function PUT(
     const { id } = await context.params;
     await connectDB();
 
-    // Get token
     const authHeader = req.headers.get("authorization");
     const token = authHeader?.split(" ")[1];
-    
+
     if (!token) {
       return NextResponse.json(
         { success: false, message: "No token provided" },
@@ -33,7 +32,6 @@ export async function PUT(
       );
     }
 
-    // Verify token
     const decoded = await verifyToken(token);
     if (!decoded) {
       return NextResponse.json(
@@ -42,7 +40,6 @@ export async function PUT(
       );
     }
 
-    // Check if user is updating their own password
     if (decoded.userId !== id) {
       return NextResponse.json(
         { success: false, message: "You can only update your own password" },
@@ -53,7 +50,6 @@ export async function PUT(
     const body = await req.json();
     const { currentPassword, newPassword, confirmPassword } = body;
 
-    // Validate inputs
     if (!currentPassword || !newPassword || !confirmPassword) {
       return NextResponse.json(
         { success: false, message: "All password fields are required!" },
@@ -75,7 +71,6 @@ export async function PUT(
       );
     }
 
-    // Get user with password
     const user = await User.findById(id).select("+password");
     if (!user) {
       return NextResponse.json(
@@ -84,7 +79,6 @@ export async function PUT(
       );
     }
 
-    // Verify current password
     const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
     if (!isPasswordValid) {
       return NextResponse.json(
@@ -93,18 +87,19 @@ export async function PUT(
       );
     }
 
-    // Hash new password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    // Update password
-    user.password = hashedPassword;
-    user.updatedAt = new Date();
-    await user.save();
+    // Use findByIdAndUpdate to skip full schema validation
+    await User.findByIdAndUpdate(
+      id,
+      { $set: { password: hashedPassword, updatedAt: new Date() } },
+      { runValidators: false }
+    );
 
     return NextResponse.json({
       success: true,
-      message: "Password updated successfully!"
+      message: "Password updated successfully!",
     });
   } catch (error) {
     console.error("Error updating password:", error);

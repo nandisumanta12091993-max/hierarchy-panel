@@ -1,8 +1,31 @@
-// app/api/join/[referralToken]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/config/db";
 import User from "@/lib/models/User";
 import bcrypt from "bcryptjs";
+
+async function generateUserCode(): Promise<string> {
+  let code = "";
+  let isUnique = false;
+
+  while (!isUnique) {
+    const lastUser = await User.findOne(
+      { userCode: /^ZENO\d+$/ },
+      { userCode: 1 }
+    ).sort({ userCode: -1 });
+
+    let nextNum = 1;
+    if (lastUser?.userCode) {
+      const lastNum = parseInt(lastUser.userCode.replace("ZENO", ""), 10);
+      nextNum = lastNum + 1;
+    }
+
+    code = `ZENO${String(nextNum).padStart(3, "0")}`;
+    const existing = await User.findOne({ userCode: code });
+    if (!existing) isUnique = true;
+  }
+
+  return code;
+}
 
 export async function POST(
   req: NextRequest,
@@ -12,104 +35,161 @@ export async function POST(
     await connectDB();
     const { referralToken } = await context.params;
 
-    // 1. Find parent user by referralToken (mobile)
-    const parentUser = await User.findOne({ mobile: referralToken });
+    const parentUser = await User.findOne({ userCode: referralToken });
     if (!parentUser) {
       return NextResponse.json(
-        { success: false, message: "Invalid referral link!" },
+        { success: false, message: "Invalid referral link! Referrer not found." },
         { status: 400 }
       );
     }
 
-    // 2. Parse JSON body - ONLY REQUIRED FIELDS
     const body = await req.json();
-    const { mobile, password, confirmPassword } = body;
+    const { name, mobile, email, pan, password, confirmPassword } = body;
 
-    // 3. Validate inputs - ONLY MOBILE AND PASSWORD ARE REQUIRED
-    if (!mobile || !password || !confirmPassword) {
+    const cleanMobile = String(mobile || "").replace(/\D/g, "").replace(/^0+/, "");
+
+    // ─── Validations ────────────────────────────────────────────────────────
+
+    if (!name?.trim()) {
       return NextResponse.json(
-        { success: false, message: "Mobile and password are required!" },
+        { success: false, message: "Full name is required!" },
         { status: 400 }
       );
     }
 
-    if (password !== confirmPassword) {
+    if (!cleanMobile) {
       return NextResponse.json(
-        { success: false, message: "Passwords do not match!" },
+        { success: false, message: "Mobile number is required!" },
         { status: 400 }
       );
     }
 
-    if (password.length < 6) {
-      return NextResponse.json(
-        { success: false, message: "Password must be at least 6 characters!" },
-        { status: 400 }
-      );
-    }
-
-    if (!mobile.match(/^\d{10}$/)) {
+    if (!/^\d{10}$/.test(cleanMobile)) {
       return NextResponse.json(
         { success: false, message: "Valid 10-digit mobile number required!" },
         { status: 400 }
       );
     }
 
-    // 4. Check if mobile already exists
-    const existingUser = await User.findOne({ mobile });
-    if (existingUser) {
+    // Password validation — only if user provided a custom password
+    if (password && password.trim()) {
+      if (password !== confirmPassword) {
+        return NextResponse.json(
+          { success: false, message: "Passwords do not match!" },
+          { status: 400 }
+        );
+      }
+      if (password.length < 6) {
+        return NextResponse.json(
+          { success: false, message: "Password must be at least 6 characters!" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json(
-        { success: false, message: "Mobile number already registered!" },
+        { success: false, message: "Invalid email format!" },
         { status: 400 }
       );
     }
 
-    // 5. Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    if (pan && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan.toUpperCase())) {
+      return NextResponse.json(
+        { success: false, message: "Invalid PAN format! Example: ABCDE1234F" },
+        { status: 400 }
+      );
+    }
 
-    // 6. Create user with only required fields
+    // ─── Duplicate checks ────────────────────────────────────────────────────
+
+    const mobileCount = await User.countDocuments({ mobile: cleanMobile });
+    if (mobileCount >= 3) {
+      return NextResponse.json(
+        { success: false, message: "This mobile number has already been used 3 times!" },
+        { status: 400 }
+      );
+    }
+
+    if (email) {
+      const emailCount = await User.countDocuments({ email: email.toLowerCase() });
+      if (emailCount >= 3) {
+        return NextResponse.json(
+          { success: false, message: "This email has already been used 3 times!" },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (pan) {
+      const panCount = await User.countDocuments({ pan: pan.toUpperCase() });
+      if (panCount >= 3) {
+        return NextResponse.json(
+          { success: false, message: "This PAN has already been used 3 times!" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // ─── Password — default "123456" agar user ne nahi diya ─────────────────
+
+    const finalPassword =
+      password && password.trim() ? password.trim() : "123456";
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(finalPassword, salt);
+
+    // ─── Create user ─────────────────────────────────────────────────────────
+
+    const userCode = await generateUserCode();
+
     const newUser = await User.create({
-      name: `User_${mobile.substring(7)}`, // Auto-generated name with last 3 digits
-      mobile,
+      name: name.trim(),
+      mobile: cleanMobile,
+      email: email ? email.toLowerCase() : "",
+      pan: pan ? pan.toUpperCase() : "",
       password: hashedPassword,
-      email: "", // Empty by default
-      policeStation: "", // Empty by default
-      walletName: "", // Empty by default
-      walletAddress: "", // Empty by default
+      userCode,
+      referralToken: userCode,
       parentId: parentUser._id,
-      referralToken: mobile,
+      maxInvestmentMonths: 35,
       payments: [],
-      children: []
+      children: [],
+      createdAt: new Date(),
     });
 
-    // 7. Add to parent's children
-    parentUser.children.push(newUser._id);
-    await parentUser.save();
+    // Push child ID to parent atomically
+    await User.findByIdAndUpdate(
+      parentUser._id,
+      { $push: { children: newUser._id } }
+    );
 
-    // 8. Return user data
-    const userResponse = {
-      _id: newUser._id,
-      name: newUser.name,
-      mobile: newUser.mobile,
-      referralToken: newUser.referralToken,
-      parentId: newUser.parentId,
-    };
+    const usedDefault = !password || !password.trim();
 
     return NextResponse.json({
       success: true,
-      message: "Registration successful! You can now login.",
-      data: userResponse,
+      message: `Registration successful! Your User ID is ${userCode}.${
+        usedDefault
+          ? " Default password is 123456 — please change it after login."
+          : ""
+      }`,
+      data: {
+        _id: newUser._id,
+        name: newUser.name,
+        userCode: newUser.userCode,
+        mobile: newUser.mobile,
+        usedDefaultPassword: usedDefault,
+      },
     });
   } catch (error: any) {
     console.error("Error while registering user:", error);
-    
     if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0] || "field";
       return NextResponse.json(
-        { success: false, message: "Mobile number already exists!" },
+        { success: false, message: `${field} already exists!` },
         { status: 400 }
       );
     }
-    
     return NextResponse.json(
       { success: false, message: "Something went wrong!" },
       { status: 500 }
