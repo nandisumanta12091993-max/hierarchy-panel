@@ -738,7 +738,7 @@ export default function DashboardPage() {
     } catch { setPasswordMessage({ type: "error", text: "Error updating password" }); }
   };
 
-  const handleLogout     = () => { localStorage.clear(); window.location.href = "/login"; };
+  const handleLogout     = () => { localStorage.clear(); window.location.href = "/Login"; };
   const handleCopyCode   = () => {
     if (!user?.userCode) return;
     navigator.clipboard.writeText(user.userCode);
@@ -1379,7 +1379,7 @@ export default function DashboardPage() {
         <div className={`${card} p-5`}>
           <h3 className="font-bold mb-1">Session</h3>
           <p className={`text-xs mb-4 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Sign out of your account</p>
-          <button onClick={handleLogout} className="flex items-center gap-2 bg-red-500/10 text-red-400 border border-red-500/20 font-bold px-4 py-3 rounded-xl w-full justify-center">
+          <button onClick={handleLogout} className="flex items-center gap-2 bg-red-500/10 text-red-400 border border-red-500/20 font-bold px-4 py-3 rounded w-full justify-center">
             <LogOut className="w-4 h-4" /> Logout
           </button>
         </div>
