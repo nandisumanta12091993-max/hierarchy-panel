@@ -6,9 +6,11 @@ export default function HeroSection() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Exo+2:wght@300;400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap');
 
-        .zeno-hero {
+        *, *::before, *::after { box-sizing: border-box; }
+
+        .zh {
           position: relative;
           width: 100%;
           min-height: 100vh;
@@ -16,421 +18,353 @@ export default function HeroSection() {
           align-items: center;
           justify-content: center;
           overflow: hidden;
-          background: #0d0620;
-          font-family: 'Exo 2', sans-serif;
+          background: #06030f;
+          font-family: 'Space Grotesk', sans-serif;
+          padding: 80px 0 60px;
         }
 
-        /* Deep purple gradient base */
-        .zeno-bg-base {
+        /* Background */
+        .zh-bg {
           position: absolute;
           inset: 0;
-          background: radial-gradient(ellipse 120% 80% at 60% 40%, #2d1260 0%, #1a0840 40%, #0d0620 100%);
+          background:
+            radial-gradient(ellipse 80% 60% at 20% 10%, rgba(180, 30, 100, 0.18) 0%, transparent 60%),
+            radial-gradient(ellipse 60% 50% at 80% 80%, rgba(60, 20, 160, 0.2) 0%, transparent 60%),
+            radial-gradient(ellipse 50% 40% at 60% 50%, rgba(0, 180, 160, 0.08) 0%, transparent 60%);
         }
 
-        /* Diagonal stripe texture */
-        .zeno-stripes {
+        /* Subtle dot grid */
+        .zh-dots {
           position: absolute;
           inset: 0;
-          background-image: repeating-linear-gradient(
-            -55deg,
-            transparent,
-            transparent 6px,
-            rgba(255,255,255,0.018) 6px,
-            rgba(255,255,255,0.018) 7px
-          );
+          background-image: radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
+          background-size: 36px 36px;
         }
 
-        /* Pink/magenta triangle — top left */
-        .zeno-tri-left {
+        /* Top accent bar */
+        .zh-accent-bar {
           position: absolute;
           top: 0;
           left: 0;
-          width: 0;
-          height: 0;
-          border-style: solid;
-          border-width: 420px 340px 0 0;
-          border-color: #c0186e transparent transparent transparent;
-          opacity: 0.85;
-          filter: blur(0px);
-        }
-        .zeno-tri-left-inner {
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 0;
-          height: 0;
-          border-style: solid;
-          border-width: 260px 210px 0 0;
-          border-color: #e01e84 transparent transparent transparent;
-          opacity: 0.9;
-        }
-
-        /* Pink triangle — bottom right */
-        .zeno-tri-right {
-          position: absolute;
-          bottom: 0;
           right: 0;
-          width: 0;
-          height: 0;
-          border-style: solid;
-          border-width: 0 0 380px 300px;
-          border-color: transparent transparent #8b1259 transparent;
-          opacity: 0.7;
+          height: 2px;
+          background: linear-gradient(90deg, transparent 0%, #e01e84 30%, #00d4be 70%, transparent 100%);
         }
 
-        /* Glowing orbs */
-        .zeno-orb-pink {
-          position: absolute;
-          width: 500px;
-          height: 500px;
-          top: -80px;
-          left: -60px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(224,30,132,0.35) 0%, transparent 70%);
-          pointer-events: none;
-          animation: zenoPulse 5s ease-in-out infinite;
-        }
-        .zeno-orb-cyan {
-          position: absolute;
-          width: 400px;
-          height: 400px;
-          bottom: -60px;
-          right: 10%;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(0,220,200,0.18) 0%, transparent 70%);
-          pointer-events: none;
-          animation: zenoPulse 6s ease-in-out infinite 1s;
-        }
-        .zeno-orb-purple {
-          position: absolute;
-          width: 600px;
-          height: 600px;
-          top: 30%;
-          right: -100px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(100,20,200,0.25) 0%, transparent 70%);
-          pointer-events: none;
-          animation: zenoPulse 7s ease-in-out infinite 0.5s;
-        }
-
-        @keyframes zenoPulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.08); opacity: 0.7; }
-        }
-
-        /* Grid lines */
-        .zeno-grid {
-          position: absolute;
-          inset: 0;
-          background-image:
-            linear-gradient(rgba(150,50,255,0.08) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(150,50,255,0.08) 1px, transparent 1px);
-          background-size: 70px 70px;
-          mask-image: radial-gradient(ellipse 70% 70% at 70% 50%, black, transparent);
-        }
-
-        /* Content */
-        .zeno-content {
+        /* Content wrapper */
+        .zh-wrap {
           position: relative;
           z-index: 10;
-          max-width: 1100px;
           width: 100%;
-          padding: 0 2rem;
+          max-width: 1080px;
+          margin: 0 auto;
+          padding: 0 24px;
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 4rem;
+          grid-template-columns: 1fr 420px;
+          gap: 64px;
           align-items: center;
         }
 
-        @media (max-width: 768px) {
-          .zeno-content { grid-template-columns: 1fr; gap: 2rem; }
-          .zeno-tri-left { border-width: 220px 180px 0 0; }
+        @media (max-width: 900px) {
+          .zh-wrap {
+            grid-template-columns: 1fr;
+            gap: 48px;
+            padding: 0 20px;
+          }
+          .zh-right { order: -1; }
         }
 
         /* Badge */
-        .zeno-badge {
+        .zh-badge {
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          padding: 6px 18px;
+          padding: 5px 14px;
           border-radius: 100px;
-          border: 1px solid rgba(0,220,200,0.4);
-          background: rgba(0,220,200,0.08);
-          color: #00dcc8;
+          background: rgba(0, 212, 190, 0.08);
+          border: 1px solid rgba(0, 212, 190, 0.25);
+          color: #00d4be;
           font-size: 11px;
           font-weight: 600;
-          letter-spacing: 0.14em;
+          letter-spacing: 0.12em;
           text-transform: uppercase;
-          margin-bottom: 1.5rem;
+          margin-bottom: 28px;
         }
-        .zeno-badge-dot {
-          width: 6px;
-          height: 6px;
+
+        .zh-dot {
+          width: 5px;
+          height: 5px;
           border-radius: 50%;
-          background: #00dcc8;
-          animation: dotBlink 1.5s ease-in-out infinite;
-          box-shadow: 0 0 8px #00dcc8;
+          background: #00d4be;
+          animation: zhBlink 2s ease-in-out infinite;
         }
-        @keyframes dotBlink {
+
+        @keyframes zhBlink {
           0%, 100% { opacity: 1; }
-          50% { opacity: 0.2; }
+          50% { opacity: 0.25; }
         }
 
-        /* Title */
-        .zeno-title {
-          font-family: 'Orbitron', sans-serif;
-          font-weight: 900;
-          font-size: clamp(3rem, 8vw, 6.5rem);
-          line-height: 0.95;
-          letter-spacing: -0.02em;
-          margin-bottom: 0.3rem;
-        }
-        .zeno-title-line1 {
-          display: block;
-          color: #a0f0e8;
-          text-shadow: 0 0 40px rgba(0,220,200,0.5), 0 0 80px rgba(0,220,200,0.2);
-        }
-        .zeno-title-line2 {
-          display: block;
-          background: linear-gradient(135deg, #e01e84 0%, #ff6ab0 50%, #c0186e 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          text-shadow: none;
-          filter: drop-shadow(0 0 30px rgba(224,30,132,0.6));
+        /* Heading */
+        .zh-heading {
+          font-family: 'Syne', sans-serif;
+          font-weight: 800;
+          line-height: 1;
+          margin: 0 0 20px;
+          letter-spacing: -0.03em;
         }
 
-        /* Tagline */
-        .zeno-tagline {
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-          margin: 1.2rem 0 1.5rem;
-          padding: 8px 20px;
-          border-radius: 4px;
-          background: rgba(41,121,255,0.2);
-          border: 1px solid rgba(41,121,255,0.5);
-          color: #a0c4ff;
-          font-size: 13px;
-          font-weight: 600;
-          letter-spacing: 0.1em;
-          text-transform: uppercase;
+        .zh-h-top {
+          display: block;
+          font-size: clamp(48px, 7vw, 80px);
+          color: #f0eeff;
+        }
+
+        .zh-h-bot {
+          display: block;
+          font-size: clamp(48px, 7vw, 80px);
+          color: #e01e84;
+          position: relative;
+        }
+
+        /* Underline accent under TECHNOLOGIES */
+        .zh-h-bot::after {
+          content: '';
+          position: absolute;
+          bottom: -6px;
+          left: 0;
+          width: 100%;
+          height: 3px;
+          background: linear-gradient(90deg, #e01e84, #ff6ab0 60%, transparent);
+          border-radius: 2px;
         }
 
         /* Description */
-        .zeno-desc {
-          color: rgba(200,180,255,0.7);
-          font-size: 1rem;
+        .zh-desc {
+          font-size: 16px;
+          color: rgba(220, 210, 255, 0.65);
           line-height: 1.75;
-          max-width: 420px;
+          max-width: 440px;
+          margin: 28px 0 36px;
         }
-        .zeno-desc-accent { color: #00dcc8; font-weight: 500; }
+
+        .zh-desc strong {
+          color: rgba(220, 210, 255, 0.9);
+          font-weight: 500;
+        }
 
         /* Buttons */
-        .zeno-btn-primary {
+        .zh-btns {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .zh-btn-p {
           display: inline-flex;
           align-items: center;
-          gap: 10px;
-          padding: 14px 32px;
-          border-radius: 4px;
-          background: linear-gradient(135deg, #e01e84 0%, #c0186e 100%);
+          gap: 8px;
+          padding: 13px 28px;
+          border-radius: 6px;
+          background: #e01e84;
           color: #fff;
           font-size: 14px;
           font-weight: 600;
-          font-family: 'Exo 2', sans-serif;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          cursor: pointer;
-          border: none;
-          box-shadow: 0 0 30px rgba(224,30,132,0.5), 0 4px 20px rgba(224,30,132,0.3);
-          transition: all 0.25s ease;
+          font-family: 'Space Grotesk', sans-serif;
+          letter-spacing: 0.04em;
           text-decoration: none;
+          transition: background 0.2s, transform 0.2s;
+          white-space: nowrap;
         }
-        .zeno-btn-primary:hover {
-          box-shadow: 0 0 50px rgba(224,30,132,0.7), 0 4px 30px rgba(224,30,132,0.5);
-          transform: translateY(-2px);
-          background: linear-gradient(135deg, #f02090 0%, #e01e84 100%);
+
+        .zh-btn-p:hover {
+          background: #f02090;
+          transform: translateY(-1px);
         }
-        .zeno-btn-secondary {
+
+        .zh-btn-p:active { transform: translateY(0); }
+
+        .zh-btn-s {
           display: inline-flex;
           align-items: center;
-          gap: 10px;
-          padding: 14px 32px;
-          border-radius: 4px;
+          gap: 8px;
+          padding: 12px 28px;
+          border-radius: 6px;
           background: transparent;
-          color: #a0f0e8;
+          color: rgba(200, 190, 255, 0.85);
           font-size: 14px;
           font-weight: 600;
-          font-family: 'Exo 2', sans-serif;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          cursor: pointer;
-          border: 1px solid rgba(0,220,200,0.4);
-          transition: all 0.25s ease;
+          font-family: 'Space Grotesk', sans-serif;
+          letter-spacing: 0.04em;
           text-decoration: none;
-          box-shadow: 0 0 15px rgba(0,220,200,0.1);
-        }
-        .zeno-btn-secondary:hover {
-          background: rgba(0,220,200,0.1);
-          border-color: #00dcc8;
-          box-shadow: 0 0 30px rgba(0,220,200,0.25);
-          transform: translateY(-2px);
+          border: 1px solid rgba(200, 190, 255, 0.2);
+          transition: border-color 0.2s, color 0.2s, transform 0.2s;
+          white-space: nowrap;
         }
 
-        /* Stats */
-        .zeno-stats {
-          display: flex;
-          gap: 2.5rem;
-          margin-top: 2.5rem;
-          padding-top: 2rem;
-          border-top: 1px solid rgba(150,50,255,0.2);
+        .zh-btn-s:hover {
+          border-color: rgba(200, 190, 255, 0.45);
+          color: rgba(220, 210, 255, 1);
+          transform: translateY(-1px);
         }
-        .zeno-stat-num {
-          font-family: 'Orbitron', sans-serif;
+
+        /* Stats row */
+        .zh-stats {
+          display: flex;
+          gap: 32px;
+          margin-top: 48px;
+          padding-top: 32px;
+          border-top: 1px solid rgba(255, 255, 255, 0.07);
+          flex-wrap: wrap;
+        }
+
+        .zh-stat-n {
+          font-family: 'Syne', sans-serif;
+          font-size: 26px;
           font-weight: 700;
-          font-size: 1.5rem;
-          color: #00dcc8;
-          text-shadow: 0 0 20px rgba(0,220,200,0.5);
-        }
-        .zeno-stat-label {
-          font-size: 11px;
-          color: rgba(200,180,255,0.5);
-          letter-spacing: 0.06em;
-          margin-top: 4px;
+          color: #f0eeff;
+          line-height: 1;
         }
 
-        /* Right panel — feature cards */
-        .zeno-card {
-          padding: 1.25rem 1.5rem;
-          border-radius: 8px;
-          border: 1px solid rgba(150,50,255,0.2);
-          background: rgba(45,18,96,0.4);
-          backdrop-filter: blur(12px);
+        .zh-stat-l {
+          font-size: 11px;
+          color: rgba(200, 190, 255, 0.4);
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          margin-top: 5px;
+        }
+
+        /* Right panel */
+        .zh-cards {
           display: flex;
-          gap: 1rem;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .zh-card {
+          display: flex;
           align-items: flex-start;
-          transition: border-color 0.25s, box-shadow 0.25s;
+          gap: 16px;
+          padding: 18px 20px;
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          transition: border-color 0.2s, background 0.2s;
         }
-        .zeno-card:hover {
-          border-color: rgba(224,30,132,0.4);
-          box-shadow: 0 0 20px rgba(224,30,132,0.1);
+
+        .zh-card:hover {
+          background: rgba(255, 255, 255, 0.05);
+          border-color: rgba(224, 30, 132, 0.25);
         }
-        .zeno-card-icon {
-          width: 40px;
-          height: 40px;
+
+        .zh-icon {
+          width: 38px;
+          height: 38px;
           border-radius: 8px;
-          background: linear-gradient(135deg, rgba(224,30,132,0.3), rgba(100,20,200,0.3));
-          border: 1px solid rgba(224,30,132,0.3);
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 18px;
           flex-shrink: 0;
         }
-        .zeno-card-title {
-          font-weight: 600;
+
+        .zh-icon-pink { background: rgba(224, 30, 132, 0.15); }
+        .zh-icon-teal { background: rgba(0, 212, 190, 0.12); }
+        .zh-icon-purple { background: rgba(130, 80, 220, 0.15); }
+
+        .zh-card-title {
           font-size: 14px;
-          color: #a0f0e8;
+          font-weight: 600;
+          color: rgba(220, 210, 255, 0.9);
           margin-bottom: 4px;
-          letter-spacing: 0.03em;
+          letter-spacing: 0.02em;
         }
-        .zeno-card-desc {
+
+        .zh-card-desc {
           font-size: 13px;
-          color: rgba(200,180,255,0.6);
+          color: rgba(200, 180, 255, 0.45);
           line-height: 1.6;
         }
 
-        /* Tags */
-        .zeno-tags {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          margin-top: 0.5rem;
-        }
-        .zeno-tag {
-          font-size: 11px;
+        /* Divider label on right */
+        .zh-panel-label {
+          font-size: 10px;
           font-weight: 600;
-          letter-spacing: 0.08em;
+          letter-spacing: 0.12em;
+          color: rgba(200, 180, 255, 0.3);
           text-transform: uppercase;
-          padding: 4px 12px;
-          border-radius: 3px;
-          border: 1px solid rgba(0,220,200,0.25);
-          background: rgba(0,220,200,0.06);
-          color: rgba(0,220,200,0.8);
+          margin-bottom: 14px;
+        }
+
+        /* Responsive tweaks */
+        @media (max-width: 480px) {
+          .zh { padding: 60px 0 40px; }
+          .zh-stats { gap: 20px; }
+          .zh-btn-p, .zh-btn-s { width: 100%; justify-content: center; }
+          .zh-btns { flex-direction: column; }
         }
       `}</style>
 
-      <div className="zeno-hero">
-        {/* BG Layers */}
-        <div className="zeno-bg-base" />
-        <div className="zeno-stripes" />
-        <div className="zeno-grid" />
-        <div className="zeno-orb-pink" />
-        <div className="zeno-orb-cyan" />
-        <div className="zeno-orb-purple" />
+      <div className="zh">
+        <div className="zh-bg" />
+        <div className="zh-dots" />
+        <div className="zh-accent-bar" />
 
-        {/* Geometric Triangles */}
-        <div className="zeno-tri-left" />
-        <div className="zeno-tri-left-inner" />
-        <div className="zeno-tri-right" />
-
-        {/* Content */}
-        <div className="zeno-content">
-
+        <div className="zh-wrap">
           {/* LEFT */}
           <div>
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-              <div className="zeno-badge">
-                <span className="zeno-badge-dot" />
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45 }}
+            >
+              <div className="zh-badge">
+                <span className="zh-dot" />
                 Now Accepting Members
               </div>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
-              <div className="zeno-title">
-                <span className="zeno-title-line1">ZENO</span>
-                <span className="zeno-title-line2">TECHNOLOGIES</span>
-              </div>
-            </motion.div>
-
-         
+            <motion.h1
+              className="zh-heading"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.08 }}
+            >
+              <span className="zh-h-top">ZENO</span>
+              <span className="zh-h-bot">TECHNOLOGIES</span>
+            </motion.h1>
 
             <motion.p
-              className="zeno-desc"
+              className="zh-desc"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.7, delay: 0.3 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
             >
-              Access advanced tools, manage your hiring operations, and
-              collaborate with your team effortlessly. Empower your workspace
-              with{" "}
-              <span className="zeno-desc-accent">Zeno Admin</span>{" "}
-              — built for teams that move fast.
+              Access advanced tools, manage hiring operations, and collaborate
+              with your team effortlessly. Empower your workspace with{" "}
+              <strong>Zeno Admin</strong> — built for teams that move fast.
             </motion.p>
 
             <motion.div
+              className="zh-btns"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              style={{ display: "flex", gap: "1rem", marginTop: "2rem", flexWrap: "wrap" }}
+              transition={{ duration: 0.5, delay: 0.3 }}
             >
-              <Link href="/Login">
-                <div className="zeno-btn-primary">
-                  Go to Dashboard
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
+              <Link href="/Login" className="zh-btn-p">
+                Go to Dashboard
+                <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+                  <path d="M3 7.5h9M8.5 4l3.5 3.5L8.5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </Link>
-<Link href="/Login">
-              <div className="zeno-btn-secondary">Learn More</div>
-</Link>            </motion.div>
+              <Link href="/Login" className="zh-btn-s">
+                Learn More
+              </Link>
+            </motion.div>
 
             <motion.div
-              className="zeno-stats"
+              className="zh-stats"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ delay: 0.6 }}
+              transition={{ delay: 0.5 }}
             >
               {[
                 { num: "14+", label: "Years Active" },
@@ -438,15 +372,79 @@ export default function HeroSection() {
                 { num: "98%", label: "Satisfaction" },
               ].map((s) => (
                 <div key={s.label}>
-                  <div className="zeno-stat-num">{s.num}</div>
-                  <div className="zeno-stat-label">{s.label}</div>
+                  <div className="zh-stat-n">{s.num}</div>
+                  <div className="zh-stat-l">{s.label}</div>
                 </div>
               ))}
             </motion.div>
           </div>
 
-     
-
+          {/* RIGHT */}
+          <motion.div
+            className="zh-right"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.55, delay: 0.15 }}
+          >
+            <div className="zh-panel-label">Platform Highlights</div>
+            <div className="zh-cards">
+              {[
+                {
+                  iconClass: "zh-icon-pink",
+                  icon: (
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <rect x="2" y="2" width="6" height="6" rx="1.5" stroke="#e01e84" strokeWidth="1.5" />
+                      <rect x="10" y="2" width="6" height="6" rx="1.5" stroke="#e01e84" strokeWidth="1.5" />
+                      <rect x="2" y="10" width="6" height="6" rx="1.5" stroke="#e01e84" strokeWidth="1.5" />
+                      <rect x="10" y="10" width="6" height="6" rx="1.5" stroke="#e01e84" strokeWidth="1.5" />
+                    </svg>
+                  ),
+                  title: "Unified Dashboard",
+                  desc: "Manage all your operations from a single, streamlined admin panel.",
+                },
+                {
+                  iconClass: "zh-icon-teal",
+                  icon: (
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <circle cx="9" cy="6" r="3" stroke="#00d4be" strokeWidth="1.5" />
+                      <path d="M3 16c0-3.314 2.686-5 6-5s6 1.686 6 5" stroke="#00d4be" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  ),
+                  title: "Team Collaboration",
+                  desc: "Role-based access and real-time collaboration built for growing teams.",
+                },
+                {
+                  iconClass: "zh-icon-purple",
+                  icon: (
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <path d="M9 2L11.5 7H16.5L12.5 10.5L14 16L9 13L4 16L5.5 10.5L1.5 7H6.5L9 2Z" stroke="#a060dc" strokeWidth="1.5" strokeLinejoin="round" />
+                    </svg>
+                  ),
+                  title: "Smart Hiring Tools",
+                  desc: "Automate screening, scheduling, and candidate management with ease.",
+                },
+                {
+                  iconClass: "zh-icon-pink",
+                  icon: (
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                      <path d="M9 2v4M9 12v4M2 9h4M12 9h4" stroke="#e01e84" strokeWidth="1.5" strokeLinecap="round" />
+                      <circle cx="9" cy="9" r="3" stroke="#e01e84" strokeWidth="1.5" />
+                    </svg>
+                  ),
+                  title: "Advanced Analytics",
+                  desc: "Track performance metrics and generate reports in real time.",
+                },
+              ].map((c) => (
+                <div className="zh-card" key={c.title}>
+                  <div className={`zh-icon ${c.iconClass}`}>{c.icon}</div>
+                  <div>
+                    <div className="zh-card-title">{c.title}</div>
+                    <div className="zh-card-desc">{c.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
         </div>
       </div>
     </>
