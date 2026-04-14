@@ -51,8 +51,6 @@ interface UserNode {
   mobile: string;
   email?: string;
   userCode?: string;
-  walletName?: string;
-  walletAddress?: string;
   referralToken?: string;
   parentId?: string;
   children: UserNode[];
@@ -69,8 +67,6 @@ interface UserData {
   email?: string;
   pan?: string;
   userCode?: string;
-  walletName?: string;
-  walletAddress?: string;
   referralToken?: string;
   parentId?: string;
   children?: any[];
@@ -83,8 +79,6 @@ interface FormData {
   mobile: string;
   email: string;
   pan: string;
-  walletName: string;
-  walletAddress: string;
 }
 
 interface PaymentFormData {
@@ -212,8 +206,8 @@ function AdminPanel({ isDarkMode, card }: { isDarkMode: boolean; card: string })
 
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Total", value: payments.length, color: "from-blue-500 to-blue-600" },
-          { label: "Pending", value: pendingCount, color: "from-amber-500 to-orange-500" },
+          { label: "Total",    value: payments.length,                                    color: "from-blue-500 to-blue-600"       },
+          { label: "Pending",  value: pendingCount,                                       color: "from-amber-500 to-orange-500"    },
           { label: "Approved", value: payments.filter(p => p.status === "approved").length, color: "from-emerald-500 to-emerald-600" },
         ].map((s) => (
           <div key={s.label} className={`${card} p-4`}>
@@ -340,9 +334,7 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    fetchNetwork();
-  }, []);
+  useEffect(() => { fetchNetwork(); }, []);
 
   const fetchNetwork = async () => {
     setLoading(true);
@@ -433,7 +425,6 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
 
     return (
       <div key={node._id} className="mb-3">
-        {/* Node card */}
         <div
           className={`rounded-2xl border transition-all ${
             isRoot
@@ -444,12 +435,10 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
           }`}
           style={{ marginLeft: `${Math.min(node.level * 24, 72)}px` }}
         >
-          {/* Top row — avatar + name + expand toggle */}
           <div
             className="flex items-center gap-3 p-4 cursor-pointer"
             onClick={() => hasChildren && toggleNode(node._id)}
           >
-            {/* Expand icon */}
             <div className="w-5 flex-shrink-0">
               {hasChildren ? (
                 isExpanded
@@ -457,13 +446,9 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
                   : <ChevronRight className="w-4 h-4 text-gray-400" />
               ) : null}
             </div>
-
-            {/* Avatar */}
             <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${getGradient(node.name)} flex items-center justify-center text-white font-black text-sm flex-shrink-0`}>
               {getInitials(node.name)}
             </div>
-
-            {/* Name + code */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="font-bold text-sm">{node.name}</p>
@@ -485,8 +470,6 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
                 )}
               </div>
             </div>
-
-            {/* Children badge */}
             {hasChildren && (
               <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${
                 isDarkMode ? "bg-white/8 text-gray-300" : "bg-gray-100 text-gray-600"
@@ -497,15 +480,14 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
             )}
           </div>
 
-          {/* Investment summary row */}
           <div className={`mx-4 mb-4 p-3 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 ${
             isDarkMode ? "bg-white/5" : "bg-gray-50"
           }`}>
             {[
-              { label: "Invested",  value: `${ps.totalInvested} USDT`,           icon: Wallet,    color: "text-blue-400" },
-              { label: "Interest",  value: `${ps.totalInterestEarned.toFixed(2)} USDT`, icon: TrendingUp, color: "text-emerald-400" },
-              { label: "Approved",  value: `${ps.approvedCount} plans`,           icon: CheckCircle, color: "text-emerald-400" },
-              { label: "Pending",   value: `${ps.pendingCount} plans`,            icon: Clock,     color: "text-amber-400" },
+              { label: "Invested",  value: `${ps.totalInvested} USDT`,                    icon: Wallet,      color: "text-blue-400"    },
+              { label: "Interest",  value: `${ps.totalInterestEarned.toFixed(2)} USDT`,   icon: TrendingUp,  color: "text-emerald-400" },
+              { label: "Approved",  value: `${ps.approvedCount} plans`,                   icon: CheckCircle, color: "text-emerald-400" },
+              { label: "Pending",   value: `${ps.pendingCount} plans`,                    icon: Clock,       color: "text-amber-400"   },
             ].map(({ label, value, icon: Icon, color }) => (
               <div key={label} className="text-center">
                 <Icon className={`w-4 h-4 mx-auto mb-1 ${color}`} />
@@ -516,7 +498,6 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
           </div>
         </div>
 
-        {/* Children */}
         {hasChildren && isExpanded && (
           <div className={`mt-2 ml-6 pl-4 border-l-2 border-dashed ${isDarkMode ? "border-white/10" : "border-gray-200"}`}>
             {node.children.map(child => renderNode(child))}
@@ -547,7 +528,6 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
     </div>
   );
 
-  // Count total members excluding self
   const countAll = (node: UserNode): number =>
     (node.children?.length || 0) + (node.children?.reduce((s, c) => s + countAll(c), 0) || 0);
 
@@ -555,7 +535,6 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
 
   return (
     <div className="space-y-5 max-w-4xl mx-auto">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-black flex items-center gap-2">
@@ -574,8 +553,6 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
           Refresh
         </button>
       </div>
-
-      {/* Tree */}
       <div className={`${card} p-4 md:p-6`}>
         {renderNode(hierarchyData)}
       </div>
@@ -604,7 +581,7 @@ export default function DashboardPage() {
   const [passwordMessage, setPasswordMessage] = useState({ type: "", text: "" });
 
   const [formData, setFormData] = useState<FormData>({
-    name: "", mobile: "", email: "", pan: "", walletName: "", walletAddress: "",
+    name: "", mobile: "", email: "", pan: "",
   });
 
   const [paymentForm, setPaymentForm] = useState<PaymentFormData>({
@@ -639,9 +616,10 @@ export default function DashboardPage() {
       if (data.success) {
         setUser(data.data);
         setFormData({
-          name: data.data.name || "", mobile: data.data.mobile || "",
-          email: data.data.email || "", pan: data.data.pan || "",
-          walletName: data.data.walletName || "", walletAddress: data.data.walletAddress || "",
+          name:   data.data.name   || "",
+          mobile: data.data.mobile || "",
+          email:  data.data.email  || "",
+          pan:    data.data.pan    || "",
         });
         fetchPayments(data.data._id);
       }
@@ -721,7 +699,7 @@ export default function DashboardPage() {
       setPasswordMessage({ type: "error", text: "New passwords do not match!" }); return;
     }
     if (passwordForm.newPassword.length < 6) {
-      setPasswordMessage({ type: "error", text: "Min 6 characters!" }); return;
+      setPasswordMessage({ type: "error", text: "Minimum 6 characters required!" }); return;
     }
     try {
       const token = localStorage.getItem("token");
@@ -732,14 +710,14 @@ export default function DashboardPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setPasswordMessage({ type: "success", text: "Password updated!" });
+        setPasswordMessage({ type: "success", text: "Password updated successfully!" });
         setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
       } else setPasswordMessage({ type: "error", text: data.message || "Error" });
     } catch { setPasswordMessage({ type: "error", text: "Error updating password" }); }
   };
 
-  const handleLogout     = () => { localStorage.clear(); window.location.href = "/Login"; };
-  const handleCopyCode   = () => {
+  const handleLogout       = () => { localStorage.clear(); window.location.href = "/Login"; };
+  const handleCopyCode     = () => {
     if (!user?.userCode) return;
     navigator.clipboard.writeText(user.userCode);
     setCopied(true); setTimeout(() => setCopied(false), 2000);
@@ -760,12 +738,12 @@ export default function DashboardPage() {
   const pendingPayments  = payments.filter(p => p.status === "pending");
 
   const tabs = [
-    { id: "dashboard",   label: "Dashboard",  icon: BarChart3   },
-    { id: "investments", label: "Investments", icon: TrendingUp  },
-    { id: "network",     label: "Network",     icon: Network     },
-    { id: "profile",     label: "Profile",     icon: User        },
-    { id: "share",       label: "Share",       icon: Share2      },
-    { id: "settings",    label: "Settings",    icon: Settings    },
+    { id: "dashboard",   label: "Dashboard",  icon: BarChart3  },
+    { id: "investments", label: "Investments", icon: TrendingUp },
+    { id: "network",     label: "Network",     icon: Network    },
+    { id: "profile",     label: "Profile",     icon: User       },
+    { id: "share",       label: "Share",       icon: Share2     },
+    { id: "settings",    label: "Settings",    icon: Settings   },
     ...(isAdmin ? [{ id: "admin", label: "Admin", icon: ShieldCheck }] : []),
   ];
 
@@ -956,10 +934,10 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Total Invested",  value: `${totalInvested.toFixed(2)} USDT`,             icon: Wallet,    color: "from-blue-500 to-blue-600",    sub: `${approvedPayments.length} active` },
-            { label: "Interest Earned", value: `${totalInterestEarned.toFixed(4)} USDT`,        icon: TrendingUp, color: "from-emerald-500 to-emerald-600", sub: "Total so far" },
+            { label: "Total Invested",  value: `${totalInvested.toFixed(2)} USDT`,             icon: Wallet,    color: "from-blue-500 to-blue-600",       sub: `${approvedPayments.length} active`  },
+            { label: "Interest Earned", value: `${totalInterestEarned.toFixed(4)} USDT`,        icon: TrendingUp, color: "from-emerald-500 to-emerald-600", sub: "Total so far"                       },
             { label: "Daily Return",    value: `${approvedPayments.reduce((s, p) => s + (p.investmentCalc?.dailyInterest || 0), 0).toFixed(4)} USDT`, icon: Activity, color: "from-amber-500 to-orange-500", sub: "Per day" },
-            { label: "Pending",         value: `${pendingPayments.length}`,                     icon: Clock,     color: "from-purple-500 to-purple-600", sub: "Awaiting approval" },
+            { label: "Pending",         value: `${pendingPayments.length}`,                     icon: Clock,     color: "from-purple-500 to-purple-600",   sub: "Awaiting approval"                  },
           ].map((stat, i) => (
             <div key={i} className={`${card} p-4 relative overflow-hidden`}>
               <div className={`absolute top-0 right-0 w-16 h-16 bg-gradient-to-br ${stat.color} opacity-10 rounded-full -mr-4 -mt-4`} />
@@ -1222,6 +1200,7 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+
         {user!.userCode && (
           <div className={`${card} p-5`}>
             <div className="flex items-center justify-between">
@@ -1236,15 +1215,14 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
         <div className={`${card} p-5`}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
-              { key: "name",          label: "Full Name",       icon: User,       placeholder: "Your full name",    editable: true  },
-              { key: "mobile",        label: "Mobile Number",   icon: Phone,      placeholder: "10-digit mobile",   editable: false },
-              { key: "email",         label: "Email Address",   icon: Mail,       placeholder: "your@email.com",    editable: true  },
-              { key: "pan",           label: "PAN Number",      icon: CreditCard, placeholder: "ABCDE1234F",        editable: false },
-              { key: "walletName",    label: "Wallet Name",     icon: Wallet,     placeholder: "Wallet name",       editable: true  },
-              { key: "walletAddress", label: "Wallet Address",  icon: Key,        placeholder: "Wallet address",    editable: true  },
+              { key: "name",   label: "Full Name",     icon: User,       placeholder: "Your full name",  editable: true  },
+              { key: "mobile", label: "Mobile Number", icon: Phone,      placeholder: "10-digit mobile", editable: false },
+              { key: "email",  label: "Email Address", icon: Mail,       placeholder: "your@email.com",  editable: true  },
+              { key: "pan",    label: "PAN Number",    icon: CreditCard, placeholder: "ABCDE1234F",      editable: false },
             ].map(({ key, label, icon: Icon, placeholder, editable }) => (
               <div key={key}>
                 <label className={`block text-xs font-semibold uppercase tracking-widest mb-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{label}</label>
