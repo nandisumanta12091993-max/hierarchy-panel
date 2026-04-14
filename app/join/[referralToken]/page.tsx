@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Loader2, UserPlus, Phone, AlertCircle,
-  CheckCircle, Mail, CreditCard, User, Copy, AlertTriangle
+  CheckCircle, Mail, CreditCard, User, Copy,
+  AlertTriangle, Lock, Shield, LogIn,
 } from "lucide-react";
 
 interface ReferrerInfo { name: string; userCode: string }
@@ -15,11 +16,12 @@ export default function JoinReferralForm() {
   const [referralToken, setReferralToken] = useState("");
   const [referrerInfo,  setReferrerInfo]  = useState<ReferrerInfo | null>(null);
   const [successData,   setSuccessData]   = useState<SuccessData  | null>(null);
-  const [copied,        setCopied]        = useState(false);
+  const [copiedId,      setCopiedId]      = useState(false);
+  const [copiedPwd,     setCopiedPwd]     = useState(false);
   const [error,         setError]         = useState("");
-  const [form, setForm] = useState({
-    name: "", mobile: "", email: "", pan: "",
-  });
+  const [form, setForm] = useState({ name: "", mobile: "", email: "", pan: "" });
+
+  const DEFAULT_PASSWORD = "123456";
 
   const params = useParams();
   const router = useRouter();
@@ -43,13 +45,15 @@ export default function JoinReferralForm() {
 
   const validate = () => {
     if (!form.name.trim())
-      return "Full name is required";
+      return "Full name is required.";
     if (!/^\d{10}$/.test(form.mobile))
-      return "Enter a valid 10-digit mobile number";
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
-      return "Enter a valid email address";
+      return "Please enter a valid 10-digit mobile number.";
+    if (!form.email.trim())
+      return "Email address is required.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+      return "Please enter a valid email address.";
     if (form.pan && !/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(form.pan))
-      return "PAN format: ABCDE1234F";
+      return "PAN format must be: ABCDE1234F";
     return null;
   };
 
@@ -60,7 +64,6 @@ export default function JoinReferralForm() {
     setError("");
     setLoading(true);
     try {
-      // No password sent — backend will set default 123456
       const res  = await fetch(`/api/join/${referralToken}`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -68,36 +71,39 @@ export default function JoinReferralForm() {
       });
       const data = await res.json();
       if (data.success) {
-        setSuccessData({
-          userCode: data.data.userCode,
-          name:     data.data.name,
-        });
+        setSuccessData({ userCode: data.data.userCode, name: data.data.name });
       } else {
-        setError(data.message || "Registration failed!");
+        setError(data.message || "Registration failed. Please try again.");
       }
     } catch {
-      setError("Network error! Please try again.");
+      setError("Network error. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const copyCode = () => {
+  const copyId = () => {
     if (!successData?.userCode) return;
     navigator.clipboard.writeText(successData.userCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
   };
 
-  const inp      = "w-full pl-9 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-white/25 focus:outline-none focus:border-amber-400/50 transition-all";
+  const copyPassword = () => {
+    navigator.clipboard.writeText(DEFAULT_PASSWORD);
+    setCopiedPwd(true);
+    setTimeout(() => setCopiedPwd(false), 2000);
+  };
+
+  const inp      = "w-full pl-9 pr-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-white/25 focus:outline-none focus:border-amber-400/60 focus:bg-white/8 transition-all duration-200";
   const iconWrap = "absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 pointer-events-none";
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  // ── Validating ─────────────────────────────────────────────────────────────
   if (validating) return (
     <Shell>
-      <div className="flex flex-col items-center gap-3 py-16">
-        <div className="w-10 h-10 border-4 border-t-transparent border-amber-400 rounded-full animate-spin" />
-        <p className="text-xs text-white/40 uppercase tracking-widest">Validating link…</p>
+      <div className="flex flex-col items-center gap-4 py-16">
+        <div className="w-12 h-12 border-[3px] border-t-transparent border-amber-400 rounded-full animate-spin" />
+        <p className="text-xs text-white/40 uppercase tracking-[0.2em]">Validating your link…</p>
       </div>
     </Shell>
   );
@@ -106,10 +112,14 @@ export default function JoinReferralForm() {
   if (!referralToken) return (
     <Shell>
       <div className="flex flex-col items-center gap-4 py-14 text-center">
-        <AlertCircle className="w-12 h-12 text-red-400" />
-        <p className="font-bold text-white text-lg">Invalid Referral Link</p>
-        <p className="text-sm text-white/50">This link is invalid or has expired.</p>
-        <a href="/login" className="mt-2 px-5 py-2.5 bg-amber-500 rounded-xl text-sm font-semibold text-white">
+        <div className="w-14 h-14 rounded-2xl bg-red-500/15 border border-red-500/25 flex items-center justify-center">
+          <AlertCircle className="w-7 h-7 text-red-400" />
+        </div>
+        <div>
+          <p className="font-bold text-white text-lg">Invalid Referral Link</p>
+          <p className="text-sm text-white/50 mt-1">This link is invalid or has expired.</p>
+        </div>
+        <a href="/login" className="mt-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-400 transition-colors rounded-xl text-sm font-semibold text-white">
           Go to Login
         </a>
       </div>
@@ -119,74 +129,118 @@ export default function JoinReferralForm() {
   // ── Success screen ─────────────────────────────────────────────────────────
   if (successData) return (
     <Shell>
-      <div className="flex flex-col items-center text-center gap-4 py-6 px-2">
+      <div className="flex flex-col items-center text-center gap-3.5 py-4 px-1">
 
-        <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+        {/* Header */}
+        <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
           <CheckCircle className="w-8 h-8 text-emerald-400" />
         </div>
-
         <div>
           <p className="text-xl font-bold text-white">
             Welcome, {successData.name.split(" ")[0]}! 🎉
           </p>
-          <p className="text-sm text-white/50 mt-1">Account created successfully.</p>
+          <p className="text-sm text-white/45 mt-1">Your account has been created successfully.</p>
         </div>
 
-        {/* User code box */}
-        <div className="w-full bg-amber-500/10 border border-amber-400/30 rounded-2xl p-4">
-          <p className="text-xs text-amber-400/70 uppercase tracking-widest mb-1">Your Unique User ID</p>
-          <p className="text-4xl font-black text-amber-400 tracking-widest font-mono">
-            {successData.userCode}
+        {/* Credentials Card */}
+        <div className="w-full bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="h-[2px] bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500" />
+          <div className="p-4 space-y-3">
+
+            <p className="text-[10px] font-semibold text-white/35 uppercase tracking-[0.18em] text-left">
+              Your Login Credentials
+            </p>
+
+            {/* User ID */}
+            <div className="bg-amber-500/10 border border-amber-400/25 rounded-xl p-3.5 text-left">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] text-amber-400/60 uppercase tracking-widest font-semibold flex items-center gap-1.5">
+                  <User className="w-3 h-3" /> User ID (Login ID · Referral ID)
+                </p>
+                <button
+                  onClick={copyId}
+                  className="flex items-center gap-1 text-[10px] text-amber-400/70 hover:text-amber-400 transition-colors"
+                >
+                  <Copy className="w-3 h-3" />
+                  {copiedId ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <p className="text-3xl font-black text-amber-400 tracking-[0.12em] font-mono">
+                {successData.userCode}
+              </p>
+            </div>
+
+            {/* Default Password */}
+            <div className="bg-emerald-500/10 border border-emerald-400/25 rounded-xl p-3.5 text-left">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[10px] text-emerald-400/60 uppercase tracking-widest font-semibold flex items-center gap-1.5">
+                  <Lock className="w-3 h-3" /> Default Password
+                </p>
+                <button
+                  onClick={copyPassword}
+                  className="flex items-center gap-1 text-[10px] text-emerald-400/70 hover:text-emerald-400 transition-colors"
+                >
+                  <Copy className="w-3 h-3" />
+                  {copiedPwd ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              <p className="text-3xl font-black text-emerald-400 tracking-[0.12em] font-mono">
+                {DEFAULT_PASSWORD}
+              </p>
+              <p className="text-[10px] text-white/30 mt-1">
+                Change this after your first login.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Warning: change password */}
+        <div className="w-full flex gap-2.5 items-start bg-amber-500/10 border border-amber-400/20 rounded-xl px-3.5 py-3 text-left">
+          <Shield className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+          <p className="text-xs text-amber-300/80 leading-relaxed">
+            For your security, please <strong className="text-amber-300">change your password</strong> immediately after your first login via the Settings page.
           </p>
-          <p className="text-xs text-white/35 mt-1">Login ID · Referral ID</p>
         </div>
 
-        {/* Password info */}
-        <div className="w-full flex gap-2.5 items-start bg-blue-500/10 border border-blue-400/20 rounded-xl px-3.5 py-3 text-left">
-          <AlertTriangle className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-blue-300 leading-relaxed">
-            For your login password, please <strong className="text-blue-300">contact your head</strong>.
-          </p>
-        </div>
-
-        {/* Save ID warning */}
+        {/* Warning: save ID */}
         <div className="w-full flex gap-2.5 items-start bg-red-500/10 border border-red-400/20 rounded-xl px-3.5 py-3 text-left">
           <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-red-300 leading-relaxed">
-            <strong>Save this ID now.</strong> It is your only way to log in.
-            You cannot recover it later — note it down immediately.
+          <p className="text-xs text-red-300/80 leading-relaxed">
+            <strong className="text-red-300">Save your User ID now.</strong> It is your only way to log in and cannot be recovered if lost.
           </p>
         </div>
 
+        {/* Actions */}
         <button
-          onClick={copyCode}
-          className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-400 rounded-xl font-semibold text-sm text-white transition-all"
+          onClick={copyId}
+          className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-400 rounded-xl font-semibold text-sm text-white transition-all shadow-lg shadow-amber-500/20"
         >
           <Copy className="w-4 h-4" />
-          {copied ? "Copied!" : `Copy ID: ${successData.userCode}`}
+          {copiedId ? "ID Copied!" : `Copy User ID: ${successData.userCode}`}
         </button>
 
         <button
           onClick={() => router.push("/login")}
-          className="w-full py-2.5 border border-white/10 rounded-xl text-sm text-white/70 hover:bg-white/5 transition-all"
+          className="w-full flex items-center justify-center gap-2 py-2.5 border border-white/10 rounded-xl text-sm text-white/70 hover:bg-white/5 transition-all"
         >
-          Go to Login →
+          <LogIn className="w-4 h-4" />
+          Proceed to Login
         </button>
       </div>
     </Shell>
   );
 
-  // ── Main form ──────────────────────────────────────────────────────────────
+  // ── Registration Form ──────────────────────────────────────────────────────
   return (
     <Shell>
       {/* Referrer badge */}
       {referrerInfo && (
-        <div className="flex items-center gap-3 px-3 py-2.5 mb-3 bg-white/5 border border-white/10 rounded-xl">
-          <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-300 font-bold text-xs flex-shrink-0">
-            {referrerInfo.name.charAt(0)}
+        <div className="flex items-center gap-3 px-3 py-2.5 mb-4 bg-white/5 border border-white/10 rounded-xl">
+          <div className="w-9 h-9 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-300 font-bold text-sm flex-shrink-0">
+            {referrerInfo.name.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-white/40">Referred by</p>
+            <p className="text-[10px] text-white/35 uppercase tracking-widest">Referred by</p>
             <p className="text-sm font-semibold text-white truncate">{referrerInfo.name}</p>
             <p className="text-xs text-amber-400 font-mono">{referrerInfo.userCode}</p>
           </div>
@@ -208,12 +262,12 @@ export default function JoinReferralForm() {
 
           <form onSubmit={handleSubmit} className="space-y-3">
 
-            {/* Full name */}
+            {/* Full Name */}
             <Field label="Full Name *">
               <User className={iconWrap} />
               <input
                 className={inp}
-                placeholder="Your full name"
+                placeholder="Enter your full name"
                 value={form.name}
                 onChange={set("name")}
                 required
@@ -226,7 +280,7 @@ export default function JoinReferralForm() {
                 <Phone className={iconWrap} />
                 <input
                   className={inp}
-                  placeholder="10 digits"
+                  placeholder="10-digit number"
                   type="tel"
                   maxLength={10}
                   value={form.mobile}
@@ -234,7 +288,7 @@ export default function JoinReferralForm() {
                   required
                 />
               </Field>
-              <Field label="PAN">
+              <Field label="PAN (Optional)">
                 <CreditCard className={iconWrap} />
                 <input
                   className={`${inp} uppercase font-mono tracking-wider`}
@@ -247,27 +301,35 @@ export default function JoinReferralForm() {
             </div>
 
             {/* Email */}
-            <Field label="Email">
+            <Field label="Email *">
               <Mail className={iconWrap} />
               <input
                 className={inp}
-                placeholder="your@email.com (optional)"
+                placeholder="your@email.com"
                 type="email"
                 value={form.email}
                 onChange={set("email")}
+                required
               />
             </Field>
 
-            {/* Password contact notice */}
-            <div className="flex gap-2 items-start bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2.5">
-              <AlertCircle className="w-3.5 h-3.5 text-blue-400 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-blue-300/80 leading-relaxed">
-                For your login password, please{" "}
-                <strong className="text-blue-300">contact your head</strong>. You will
-                also receive a unique{" "}
-                <strong className="text-blue-300">User Code</strong> (e.g. ZENO001) which
-                is your Login ID and Referral ID — save it carefully.
+            {/* Credentials info */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3.5 space-y-2">
+              <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold">
+                After Registration, You Will Receive
               </p>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 flex-shrink-0" />
+                <p className="text-xs text-white/55 leading-relaxed">
+                  A unique <strong className="text-amber-400">User ID</strong> (e.g. ZENO001) — this is your Login ID and Referral ID. Save it carefully.
+                </p>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0" />
+                <p className="text-xs text-white/55 leading-relaxed">
+                  A <strong className="text-emerald-400">default password</strong> of <strong className="text-emerald-400 font-mono">123456</strong> — change it after your first login.
+                </p>
+              </div>
             </div>
 
             <button
@@ -284,8 +346,8 @@ export default function JoinReferralForm() {
 
           <p className="text-center text-xs text-white/35 mt-4">
             Already have an account?{" "}
-            <a href="/login" className="text-amber-400 hover:text-amber-300 font-semibold">
-              Login here
+            <a href="/Login" className="text-amber-400 hover:text-amber-300 font-semibold transition-colors">
+              Log in here
             </a>
           </p>
         </div>
@@ -301,12 +363,14 @@ function Shell({ children }: { children: React.ReactNode }) {
       className="min-h-screen flex items-center justify-center px-4 py-8"
       style={{ background: "linear-gradient(135deg,#0f0c29 0%,#1a1650 50%,#0f0c29 100%)" }}
     >
-      <div className="fixed top-16 left-8 w-56 h-56 bg-purple-700/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="fixed bottom-16 right-8 w-56 h-56 bg-amber-500/8 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed top-16 left-8 w-64 h-64 bg-purple-700/12 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed bottom-16 right-8 w-64 h-64 bg-amber-500/8 rounded-full blur-3xl pointer-events-none" />
+
       <div className="w-full max-w-sm relative z-10">
-        <div className="flex items-center gap-2.5 mb-4">
-          <div className="w-9 h-9 bg-amber-500 rounded-xl flex items-center justify-center rotate-3 shadow-lg shadow-amber-500/25">
-            <UserPlus className="w-4 h-4 text-white" strokeWidth={2.5} />
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center rotate-3 shadow-lg shadow-amber-500/30">
+            <UserPlus className="w-5 h-5 text-white" strokeWidth={2.5} />
           </div>
           <div>
             <p className="text-lg font-black text-white leading-none">
@@ -315,6 +379,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             <p className="text-xs text-white/35">Create your investment account</p>
           </div>
         </div>
+
         {children}
       </div>
     </div>
