@@ -131,7 +131,6 @@ export default function JoinReferralForm() {
     <Shell>
       <div className="flex flex-col items-center text-center gap-3.5 py-4 px-1">
 
-        {/* Header */}
         <div className="w-16 h-16 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
           <CheckCircle className="w-8 h-8 text-emerald-400" />
         </div>
@@ -142,7 +141,6 @@ export default function JoinReferralForm() {
           <p className="text-sm text-white/45 mt-1">Your account has been created successfully.</p>
         </div>
 
-        {/* Credentials Card */}
         <div className="w-full bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
           <div className="h-[2px] bg-gradient-to-r from-amber-400 via-orange-400 to-amber-500" />
           <div className="p-4 space-y-3">
@@ -194,7 +192,6 @@ export default function JoinReferralForm() {
           </div>
         </div>
 
-        {/* Warning: change password */}
         <div className="w-full flex gap-2.5 items-start bg-amber-500/10 border border-amber-400/20 rounded-xl px-3.5 py-3 text-left">
           <Shield className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
           <p className="text-xs text-amber-300/80 leading-relaxed">
@@ -202,7 +199,6 @@ export default function JoinReferralForm() {
           </p>
         </div>
 
-        {/* Warning: save ID */}
         <div className="w-full flex gap-2.5 items-start bg-red-500/10 border border-red-400/20 rounded-xl px-3.5 py-3 text-left">
           <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
           <p className="text-xs text-red-300/80 leading-relaxed">
@@ -210,7 +206,6 @@ export default function JoinReferralForm() {
           </p>
         </div>
 
-        {/* Actions */}
         <button
           onClick={copyId}
           className="w-full flex items-center justify-center gap-2 py-3 bg-amber-500 hover:bg-amber-400 rounded-xl font-semibold text-sm text-white transition-all shadow-lg shadow-amber-500/20"
@@ -233,7 +228,6 @@ export default function JoinReferralForm() {
   // ── Registration Form ──────────────────────────────────────────────────────
   return (
     <Shell>
-      {/* Referrer badge */}
       {referrerInfo && (
         <div className="flex items-center gap-3 px-3 py-2.5 mb-4 bg-white/5 border border-white/10 rounded-xl">
           <div className="w-9 h-9 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-300 font-bold text-sm flex-shrink-0">
@@ -247,12 +241,10 @@ export default function JoinReferralForm() {
         </div>
       )}
 
-      {/* Form card */}
       <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
         <div className="h-[3px] bg-gradient-to-r from-amber-400 via-orange-500 to-pink-500" />
         <div className="p-5">
 
-          {/* Error banner */}
           {error && (
             <div className="flex gap-2 items-start mb-4 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5">
               <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
@@ -262,7 +254,6 @@ export default function JoinReferralForm() {
 
           <form onSubmit={handleSubmit} className="space-y-3">
 
-            {/* Full Name */}
             <Field label="Full Name *">
               <User className={iconWrap} />
               <input
@@ -274,7 +265,6 @@ export default function JoinReferralForm() {
               />
             </Field>
 
-            {/* Mobile + PAN */}
             <div className="grid grid-cols-2 gap-2.5">
               <Field label="Mobile *">
                 <Phone className={iconWrap} />
@@ -300,7 +290,6 @@ export default function JoinReferralForm() {
               </Field>
             </div>
 
-            {/* Email */}
             <Field label="Email *">
               <Mail className={iconWrap} />
               <input
@@ -313,7 +302,6 @@ export default function JoinReferralForm() {
               />
             </Field>
 
-            {/* Credentials info */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-3.5 space-y-2">
               <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold">
                 After Registration, You Will Receive
@@ -356,7 +344,6 @@ export default function JoinReferralForm() {
   );
 }
 
-// ── Shell ──────────────────────────────────────────────────────────────────────
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div
@@ -367,7 +354,6 @@ function Shell({ children }: { children: React.ReactNode }) {
       <div className="fixed bottom-16 right-8 w-64 h-64 bg-amber-500/8 rounded-full blur-3xl pointer-events-none" />
 
       <div className="w-full max-w-sm relative z-10">
-        {/* Header */}
         <div className="flex items-center gap-3 mb-5">
           <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center rotate-3 shadow-lg shadow-amber-500/30">
             <UserPlus className="w-5 h-5 text-white" strokeWidth={2.5} />
@@ -386,7 +372,6 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ── Field wrapper ──────────────────────────────────────────────────────────────
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">

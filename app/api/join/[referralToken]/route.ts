@@ -3,6 +3,8 @@ import { connectDB } from "@/lib/config/db";
 import User from "@/lib/models/User";
 import bcrypt from "bcryptjs";
 
+const DEFAULT_MAX_MONTHS = 24;  // 2 years
+
 async function generateUserCode(): Promise<string> {
   let code = "";
   let isUnique = false;
@@ -48,7 +50,7 @@ export async function POST(
 
     const cleanMobile = String(mobile || "").replace(/\D/g, "").replace(/^0+/, "");
 
-    // ─── Validations ────────────────────────────────────────────────────────
+    // ─── Validations ─────────────────────────────────────────────────────────
 
     if (!name?.trim()) {
       return NextResponse.json(
@@ -71,7 +73,6 @@ export async function POST(
       );
     }
 
-    // Password validation — only if user provided a custom password
     if (password && password.trim()) {
       if (password !== confirmPassword) {
         return NextResponse.json(
@@ -101,7 +102,7 @@ export async function POST(
       );
     }
 
-    // ─── Duplicate checks ────────────────────────────────────────────────────
+    // ─── Duplicate checks ─────────────────────────────────────────────────────
 
     const mobileCount = await User.countDocuments({ mobile: cleanMobile });
     if (mobileCount >= 3) {
@@ -131,7 +132,7 @@ export async function POST(
       }
     }
 
-    // ─── Password — default "123456" agar user ne nahi diya ─────────────────
+    // ─── Password — default "123456" if not provided ──────────────────────────
 
     const finalPassword =
       password && password.trim() ? password.trim() : "123456";
@@ -139,7 +140,7 @@ export async function POST(
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(finalPassword, salt);
 
-    // ─── Create user ─────────────────────────────────────────────────────────
+    // ─── Create user ──────────────────────────────────────────────────────────
 
     const userCode = await generateUserCode();
 
@@ -152,7 +153,7 @@ export async function POST(
       userCode,
       referralToken: userCode,
       parentId: parentUser._id,
-      maxInvestmentMonths: 35,
+      maxInvestmentMonths: DEFAULT_MAX_MONTHS,  // 2 years default
       payments: [],
       children: [],
       createdAt: new Date(),

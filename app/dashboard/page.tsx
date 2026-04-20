@@ -95,6 +95,8 @@ interface PasswordFormData {
 
 const MONTHLY_RATE = 0.08;
 const DAYS_PER_MONTH = 30;
+const DEFAULT_MAX_MONTHS = 24;   // 2 years
+const REFERRAL_MAX_MONTHS = 30;  // 2.5 years with referral
 const SUPER_ADMIN_CODE = "ZENO000";
 
 function getDailyInterest(amount: number) {
@@ -206,8 +208,8 @@ function AdminPanel({ isDarkMode, card }: { isDarkMode: boolean; card: string })
 
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Total",    value: payments.length,                                    color: "from-blue-500 to-blue-600"       },
-          { label: "Pending",  value: pendingCount,                                       color: "from-amber-500 to-orange-500"    },
+          { label: "Total",    value: payments.length,                                     color: "from-blue-500 to-blue-600"       },
+          { label: "Pending",  value: pendingCount,                                        color: "from-amber-500 to-orange-500"    },
           { label: "Approved", value: payments.filter(p => p.status === "approved").length, color: "from-emerald-500 to-emerald-600" },
         ].map((s) => (
           <div key={s.label} className={`${card} p-4`}>
@@ -369,7 +371,6 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
         const d = await res.json();
         payments = d.success ? d.data : [];
       }
-
       const approved = payments.filter(p => p.status === "approved");
       const pending  = payments.filter(p => p.status === "pending");
       const paymentSummary: PaymentSummary = {
@@ -378,11 +379,9 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
         pendingCount:        pending.length,
         totalInterestEarned: approved.reduce((s, p) => s + (p.investmentCalc?.totalInterest || 0), 0),
       };
-
       const children: UserNode[] = node.children?.length
         ? await Promise.all(node.children.map((c: any) => enrichWithPayments(c, token, level + 1)))
         : [];
-
       return { ...node, payments, paymentSummary, children, level };
     } catch {
       return {
@@ -560,6 +559,360 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
   );
 }
 
+// ─── Statistics Panel ──────────────────────────────────────────────────────────
+
+interface LevelStats {
+  level: number;
+  members: UserNode[];
+  totalMembers: number;
+  activeMembers: number;
+  inactiveMembers: number;
+  totalBusiness: number;
+}
+
+function StatisticsPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode: boolean; card: string }) {
+  const [hierarchyData, setHierarchyData] = useState<UserNode | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selectedLevel, setSelectedLevel] = useState<LevelStats | null>(null);
+
+  useEffect(() => { fetchStats(); }, []);
+
+  const fetchStats = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/tree/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        const enriched = await enrichWithPayments(data.data, token!);
+        setHierarchyData(enriched);
+      } else {
+        setError(data.message || "Failed to load statistics");
+      }
+    } catch {
+      setError("Failed to load statistics");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const enrichWithPayments = async (node: any, token: string, level = 0): Promise<UserNode> => {
+    try {
+      const res = await fetch(`/api/users/${node._id}/payments`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      let payments: Payment[] = [];
+      if (res.ok) {
+        const d = await res.json();
+        payments = d.success ? d.data : [];
+      }
+      const approved = payments.filter(p => p.status === "approved");
+      const pending  = payments.filter(p => p.status === "pending");
+      const paymentSummary: PaymentSummary = {
+        totalInvested:       approved.reduce((s, p) => s + p.amount, 0),
+        approvedCount:       approved.length,
+        pendingCount:        pending.length,
+        totalInterestEarned: approved.reduce((s, p) => s + (p.investmentCalc?.totalInterest || 0), 0),
+      };
+      const children: UserNode[] = node.children?.length
+        ? await Promise.all(node.children.map((c: any) => enrichWithPayments(c, token, level + 1)))
+        : [];
+      return { ...node, payments, paymentSummary, children, level };
+    } catch {
+      return {
+        ...node,
+        payments: [],
+        paymentSummary: { totalInvested: 0, approvedCount: 0, pendingCount: 0, totalInterestEarned: 0 },
+        children: node.children || [],
+        level,
+      };
+    }
+  };
+
+  const getLevelStats = (root: UserNode): LevelStats[] => {
+    const levelMap: Map<number, UserNode[]> = new Map();
+    const traverse = (node: UserNode) => {
+      if (node.level > 0) {
+        const existing = levelMap.get(node.level) || [];
+        existing.push(node);
+        levelMap.set(node.level, existing);
+      }
+      node.children?.forEach(child => traverse(child));
+    };
+    traverse(root);
+    return Array.from(levelMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([level, members]) => ({
+        level,
+        members,
+        totalMembers:    members.length,
+        activeMembers:   members.filter(m => m.paymentSummary.approvedCount > 0).length,
+        inactiveMembers: members.filter(m => m.paymentSummary.approvedCount === 0).length,
+        totalBusiness:   members.reduce((s, m) => s + m.paymentSummary.totalInvested, 0),
+      }));
+  };
+
+  const levelColors = [
+    { badge: isDarkMode ? "bg-blue-500/20 text-blue-300"    : "bg-blue-100 text-blue-700",    bar: "border-l-blue-400",    btn: isDarkMode ? "bg-blue-500/20 text-blue-300 border-blue-400/40"    : "bg-blue-50 text-blue-700 border-blue-200"    },
+    { badge: isDarkMode ? "bg-purple-500/20 text-purple-300" : "bg-purple-100 text-purple-700", bar: "border-l-purple-400",  btn: isDarkMode ? "bg-purple-500/20 text-purple-300 border-purple-400/40" : "bg-purple-50 text-purple-700 border-purple-200" },
+    { badge: isDarkMode ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-100 text-emerald-700", bar: "border-l-emerald-400", btn: isDarkMode ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40" : "bg-emerald-50 text-emerald-700 border-emerald-200" },
+    { badge: isDarkMode ? "bg-amber-500/20 text-amber-300"   : "bg-amber-100 text-amber-700",   bar: "border-l-amber-400",   btn: isDarkMode ? "bg-amber-500/20 text-amber-300 border-amber-400/40"   : "bg-amber-50 text-amber-700 border-amber-200"   },
+    { badge: isDarkMode ? "bg-pink-500/20 text-pink-300"     : "bg-pink-100 text-pink-700",     bar: "border-l-pink-400",    btn: isDarkMode ? "bg-pink-500/20 text-pink-300 border-pink-400/40"     : "bg-pink-50 text-pink-700 border-pink-200"     },
+  ];
+
+  const getColor = (level: number) => levelColors[(level - 1) % levelColors.length];
+
+  const getInitials = (name: string) => {
+    const w = name.trim().split(" ");
+    return w.length >= 2 ? (w[0][0] + w[w.length - 1][0]).toUpperCase() : name.substring(0, 2).toUpperCase();
+  };
+
+  const avatarGradients = [
+    "from-purple-500 to-pink-500",
+    "from-blue-500 to-cyan-500",
+    "from-emerald-500 to-teal-500",
+    "from-amber-500 to-orange-500",
+  ];
+  const getGrad = (name: string) => avatarGradients[name.charCodeAt(0) % avatarGradients.length];
+
+  if (loading) return (
+    <div className="flex justify-center py-16">
+      <div className="w-10 h-10 border-4 border-t-transparent border-amber-400 rounded-full animate-spin" />
+    </div>
+  );
+
+  if (error) return (
+    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400 text-sm">
+      <AlertCircle className="w-4 h-4" /> {error}
+    </div>
+  );
+
+  if (!hierarchyData) return (
+    <div className={`${card} p-12 text-center`}>
+      <BarChart3 className="w-12 h-12 mx-auto mb-3 text-gray-600" />
+      <p className={isDarkMode ? "text-gray-400" : "text-gray-500"}>No network data yet.</p>
+    </div>
+  );
+
+  const levelStats = getLevelStats(hierarchyData);
+  const totalAll      = levelStats.reduce((s, l) => s + l.totalMembers, 0);
+  const totalActive   = levelStats.reduce((s, l) => s + l.activeMembers, 0);
+  const totalInactive = levelStats.reduce((s, l) => s + l.inactiveMembers, 0);
+  const totalBusiness = levelStats.reduce((s, l) => s + l.totalBusiness, 0);
+
+  // ── Level Detail View ────────────────────────────────────────────────────
+  if (selectedLevel) {
+    const color = getColor(selectedLevel.level);
+    return (
+      <div className="space-y-5 max-w-4xl mx-auto">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setSelectedLevel(null)}
+            className={`p-2 rounded-xl ${isDarkMode ? "bg-white/5 hover:bg-white/10" : "bg-gray-100 hover:bg-gray-200"}`}
+          >
+            <ChevronRight className="w-5 h-5 rotate-180" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-black flex items-center gap-2">
+              <span className={`px-3 py-1 rounded-full text-sm ${color.badge}`}>Level {selectedLevel.level}</span>
+              Members
+            </h1>
+            <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+              {selectedLevel.totalMembers} total · {selectedLevel.activeMembers} active · {selectedLevel.inactiveMembers} inactive
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: "Total",    value: String(selectedLevel.totalMembers),                    col: isDarkMode ? "text-white" : "text-gray-900"  },
+            { label: "Active",   value: String(selectedLevel.activeMembers),                   col: "text-emerald-400"                           },
+            { label: "Inactive", value: String(selectedLevel.inactiveMembers),                 col: "text-amber-400"                             },
+            { label: "Business", value: `${selectedLevel.totalBusiness.toFixed(0)} USDT`,      col: "text-blue-400"                              },
+          ].map(s => (
+            <div key={s.label} className={`${card} p-4`}>
+              <p className={`text-xs mb-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{s.label}</p>
+              <p className={`text-xl font-black ${s.col}`}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="space-y-3">
+          {selectedLevel.members.map(member => {
+            const isActive = member.paymentSummary.approvedCount > 0;
+            return (
+              <div key={member._id} className={`${card} p-4`}>
+                <div className="flex items-start gap-3">
+                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${getGrad(member.name)} flex items-center justify-center text-white font-black text-sm flex-shrink-0`}>
+                    {getInitials(member.name)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <p className="font-bold text-sm">{member.name}</p>
+                      {member.userCode && <span className="font-mono text-xs text-amber-400">{member.userCode}</span>}
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+                        isActive ? "bg-emerald-500/15 text-emerald-400" : "bg-gray-500/15 text-gray-400"
+                      }`}>
+                        {isActive ? "Active" : "Inactive"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className={`text-xs flex items-center gap-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                        <Smartphone className="w-3 h-3" />{member.mobile}
+                      </span>
+                      {member.email && (
+                        <span className={`text-xs flex items-center gap-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                          <Mail className="w-3 h-3" />{member.email}
+                        </span>
+                      )}
+                      <span className={`text-xs flex items-center gap-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                        <Clock className="w-3 h-3" />
+                        Joined {new Date(member.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 p-3 rounded-xl ${isDarkMode ? "bg-white/5" : "bg-gray-50"}`}>
+                  {[
+                    { label: "Invested",  value: `${member.paymentSummary.totalInvested} USDT`,                  icon: Wallet,      color: "text-blue-400"    },
+                    { label: "Interest",  value: `${member.paymentSummary.totalInterestEarned.toFixed(2)} USDT`, icon: TrendingUp,  color: "text-emerald-400" },
+                    { label: "Approved",  value: `${member.paymentSummary.approvedCount} plans`,                 icon: CheckCircle, color: "text-emerald-400" },
+                    { label: "Pending",   value: `${member.paymentSummary.pendingCount} plans`,                  icon: Clock,       color: "text-amber-400"   },
+                  ].map(({ label, value, icon: Icon, color }) => (
+                    <div key={label} className="text-center">
+                      <Icon className={`w-3.5 h-3.5 mx-auto mb-1 ${color}`} />
+                      <p className={`text-xs mb-0.5 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>{label}</p>
+                      <p className="font-bold text-xs">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main Statistics View ──────────────────────────────────────────────────
+  return (
+    <div className="space-y-5 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-black flex items-center gap-2">
+            <BarChart3 className="w-6 h-6 text-amber-400" /> Network Statistics
+          </h1>
+          <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+            Hierarchy breakdown by level
+          </p>
+        </div>
+        <button
+          onClick={fetchStats}
+          className={`px-4 py-2 rounded-xl text-sm font-semibold ${isDarkMode ? "bg-white/5 hover:bg-white/10 text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}
+        >
+          Refresh
+        </button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Total Members",  value: String(totalAll),                        color: "from-blue-500 to-blue-600",       icon: Users     },
+          { label: "Active",         value: String(totalActive),                     color: "from-emerald-500 to-emerald-600", icon: Activity  },
+          { label: "Inactive",       value: String(totalInactive),                   color: "from-amber-500 to-orange-500",    icon: Clock     },
+          { label: "Total Business", value: `${totalBusiness.toFixed(0)} USDT`,      color: "from-purple-500 to-purple-600",   icon: Wallet    },
+        ].map((s, i) => (
+          <div key={i} className={`${card} p-4 relative overflow-hidden`}>
+            <div className={`absolute top-0 right-0 w-14 h-14 bg-gradient-to-br ${s.color} opacity-10 rounded-full -mr-3 -mt-3`} />
+            <div className={`w-8 h-8 bg-gradient-to-br ${s.color} rounded-lg flex items-center justify-center mb-2`}>
+              <s.icon className="w-4 h-4 text-white" />
+            </div>
+            <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}>{s.label}</p>
+            <p className="font-bold text-lg">{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {levelStats.length === 0 ? (
+        <div className={`${card} p-10 text-center`}>
+          <Users className="w-12 h-12 mx-auto mb-3 text-gray-600" />
+          <p className={isDarkMode ? "text-gray-400" : "text-gray-500"}>
+            No downline members yet. Share your referral link to build your network.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {levelStats.map(ls => {
+            const color = getColor(ls.level);
+            const activePercent = ls.totalMembers > 0 ? Math.round((ls.activeMembers / ls.totalMembers) * 100) : 0;
+            return (
+              <div
+                key={ls.level}
+                className={`${card} border-l-4 ${color.bar} overflow-hidden`}
+                style={{ marginLeft: `${Math.min((ls.level - 1) * 16, 48)}px` }}
+              >
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-bold px-3 py-1 rounded-full ${color.badge}`}>
+                        Level {ls.level}
+                      </span>
+                      <span className={`text-sm font-semibold ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}>
+                        {ls.totalMembers} member{ls.totalMembers !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setSelectedLevel(ls)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${color.btn}`}
+                    >
+                      View details <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                    {[
+                      { label: "Total",    value: String(ls.totalMembers),                   col: isDarkMode ? "text-white" : "text-gray-900" },
+                      { label: "Active",   value: String(ls.activeMembers),                  col: "text-emerald-400"                          },
+                      { label: "Inactive", value: String(ls.inactiveMembers),                col: "text-amber-400"                            },
+                      { label: "Business", value: `${ls.totalBusiness.toFixed(0)} USDT`,     col: "text-blue-400"                             },
+                    ].map(s => (
+                      <div key={s.label} className={`p-2.5 rounded-xl ${isDarkMode ? "bg-white/5" : "bg-gray-50"} text-center`}>
+                        <p className={`text-xs mb-0.5 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>{s.label}</p>
+                        <p className={`font-bold ${s.col}`}>{s.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>Active rate</span>
+                      <span>{activePercent}%</span>
+                    </div>
+                    <div className={`h-1.5 rounded-full ${isDarkMode ? "bg-white/10" : "bg-gray-200"}`}>
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-500 transition-all"
+                        style={{ width: `${activePercent}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <p className={`text-xs text-center ${isDarkMode ? "text-gray-600" : "text-gray-400"}`}>
+        Active = at least 1 approved investment · Inactive = no approved investment
+      </p>
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -716,8 +1069,8 @@ export default function DashboardPage() {
     } catch { setPasswordMessage({ type: "error", text: "Error updating password" }); }
   };
 
-  const handleLogout       = () => { localStorage.clear(); window.location.href = "/Login"; };
-  const handleCopyCode     = () => {
+  const handleLogout        = () => { localStorage.clear(); window.location.href = "/Login"; };
+  const handleCopyCode      = () => {
     if (!user?.userCode) return;
     navigator.clipboard.writeText(user.userCode);
     setCopied(true); setTimeout(() => setCopied(false), 2000);
@@ -738,12 +1091,13 @@ export default function DashboardPage() {
   const pendingPayments  = payments.filter(p => p.status === "pending");
 
   const tabs = [
-    { id: "dashboard",   label: "Dashboard",  icon: BarChart3  },
-    { id: "investments", label: "Investments", icon: TrendingUp },
-    { id: "network",     label: "Network",     icon: Network    },
-    { id: "profile",     label: "Profile",     icon: User       },
-    { id: "share",       label: "Share",       icon: Share2     },
-    { id: "settings",    label: "Settings",    icon: Settings   },
+    { id: "dashboard",   label: "Dashboard",   icon: BarChart3   },
+    { id: "investments", label: "Investments",  icon: TrendingUp  },
+    { id: "network",     label: "Network",      icon: Network     },
+    { id: "statistics",  label: "Statistics",   icon: Activity    },
+    { id: "profile",     label: "Profile",      icon: User        },
+    { id: "share",       label: "Share",        icon: Share2      },
+    { id: "settings",    label: "Settings",     icon: Settings    },
     ...(isAdmin ? [{ id: "admin", label: "Admin", icon: ShieldCheck }] : []),
   ];
 
@@ -898,6 +1252,7 @@ export default function DashboardPage() {
       case "dashboard":   return renderDashboard();
       case "investments": return renderInvestments();
       case "network":     return <NetworkPanel userId={user!._id} isDarkMode={isDarkMode} card={card} />;
+      case "statistics":  return <StatisticsPanel userId={user!._id} isDarkMode={isDarkMode} card={card} />;
       case "profile":     return renderProfile();
       case "share":       return renderShare();
       case "settings":    return renderSettings();
@@ -934,10 +1289,10 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Total Invested",  value: `${totalInvested.toFixed(2)} USDT`,             icon: Wallet,    color: "from-blue-500 to-blue-600",       sub: `${approvedPayments.length} active`  },
-            { label: "Interest Earned", value: `${totalInterestEarned.toFixed(4)} USDT`,        icon: TrendingUp, color: "from-emerald-500 to-emerald-600", sub: "Total so far"                       },
+            { label: "Total Invested",  value: `${totalInvested.toFixed(2)} USDT`,              icon: Wallet,     color: "from-blue-500 to-blue-600",       sub: `${approvedPayments.length} active`  },
+            { label: "Interest Earned", value: `${totalInterestEarned.toFixed(4)} USDT`,         icon: TrendingUp, color: "from-emerald-500 to-emerald-600", sub: "Total so far"                       },
             { label: "Daily Return",    value: `${approvedPayments.reduce((s, p) => s + (p.investmentCalc?.dailyInterest || 0), 0).toFixed(4)} USDT`, icon: Activity, color: "from-amber-500 to-orange-500", sub: "Per day" },
-            { label: "Pending",         value: `${pendingPayments.length}`,                     icon: Clock,     color: "from-purple-500 to-purple-600",   sub: "Awaiting approval"                  },
+            { label: "Pending",         value: `${pendingPayments.length}`,                      icon: Clock,      color: "from-purple-500 to-purple-600",   sub: "Awaiting approval"                  },
           ].map((stat, i) => (
             <div key={i} className={`${card} p-4 relative overflow-hidden`}>
               <div className={`absolute top-0 right-0 w-16 h-16 bg-gradient-to-br ${stat.color} opacity-10 rounded-full -mr-4 -mt-4`} />
@@ -960,7 +1315,8 @@ export default function DashboardPage() {
               <div className="space-y-3">
                 {approvedPayments.slice(0, 3).map(payment => {
                   const calc     = payment.investmentCalc;
-                  const progress = calc ? Math.min((calc.daysElapsed / ((payment.maxMonths || 25) * 30)) * 100, 100) : 0;
+                  const maxMo    = payment.maxMonths || DEFAULT_MAX_MONTHS;
+                  const progress = calc ? Math.min((calc.daysElapsed / (maxMo * 30)) * 100, 100) : 0;
                   return (
                     <div key={payment._id} className={`p-4 rounded-xl ${isDarkMode ? "bg-white/5" : "bg-gray-50"}`}>
                       <div className="flex justify-between items-start mb-3">
@@ -978,7 +1334,7 @@ export default function DashboardPage() {
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-gray-500">
                           <span>{calc?.daysElapsed || 0} days</span>
-                          <span>{payment.maxMonths || 25} months max</span>
+                          <span>{maxMo} months max</span>
                         </div>
                         <div className={`h-1.5 rounded-full ${isDarkMode ? "bg-white/10" : "bg-gray-200"}`}>
                           <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all" style={{ width: `${progress}%` }} />
@@ -1018,7 +1374,7 @@ export default function DashboardPage() {
             </div>
             <h3 className="font-bold text-lg mb-2">Start Investing</h3>
             <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-4`}>
-              Invest 50–5,000 USDT and earn 8% monthly interest
+              Invest 50–5,000 USDT and earn 8% monthly interest for up to {DEFAULT_MAX_MONTHS} months
             </p>
             <button onClick={() => setActiveTab("investments")} className="bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold px-6 py-3 rounded-xl hover:opacity-90 transition-all">
               Make First Investment
@@ -1039,7 +1395,9 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-black">Investments</h1>
-            <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>8% monthly · Up to 5,000 USDT</p>
+            <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+              8% monthly · Up to 5,000 USDT · {DEFAULT_MAX_MONTHS} months
+            </p>
           </div>
           <button onClick={() => setShowAddPayment(!showAddPayment)} className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold px-4 py-2.5 rounded-xl text-sm">
             <Plus className="w-4 h-4" /> Invest
@@ -1122,6 +1480,7 @@ export default function DashboardPage() {
               const statusCfg  = getStatusConfig(payment.status);
               const StatusIcon = statusCfg.icon;
               const calc       = payment.investmentCalc;
+              const maxMo      = payment.maxMonths || DEFAULT_MAX_MONTHS;
               return (
                 <div key={payment._id} className={card}>
                   <div className="p-4 md:p-5">
@@ -1156,11 +1515,11 @@ export default function DashboardPage() {
                         </div>
                         <div>
                           <div className="flex justify-between text-xs text-gray-500 mb-1">
-                            <span>{calc.daysElapsed} / {(payment.maxMonths || 25) * 30} days</span>
-                            <span>{((calc.daysElapsed / ((payment.maxMonths || 25) * 30)) * 100).toFixed(1)}%</span>
+                            <span>{calc.daysElapsed} / {maxMo * 30} days</span>
+                            <span>{((calc.daysElapsed / (maxMo * 30)) * 100).toFixed(1)}%</span>
                           </div>
                           <div className={`h-2 rounded-full ${isDarkMode ? "bg-white/10" : "bg-gray-200"}`}>
-                            <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" style={{ width: `${Math.min((calc.daysElapsed / ((payment.maxMonths || 25) * 30)) * 100, 100)}%` }} />
+                            <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" style={{ width: `${Math.min((calc.daysElapsed / (maxMo * 30)) * 100, 100)}%` }} />
                           </div>
                           <p className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>
                             Matures: {new Date(calc.maturityDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
@@ -1249,7 +1608,9 @@ export default function DashboardPage() {
       <div className="space-y-5 max-w-2xl mx-auto">
         <div>
           <h1 className="text-2xl font-black">Share & Earn</h1>
-          <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Invite friends to extend your investment to 35 months</p>
+          <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+            Invite friends to extend your investment to {REFERRAL_MAX_MONTHS} months
+          </p>
         </div>
         <div className={`${card} p-5`}>
           <div className="flex items-center gap-3 mb-5">
@@ -1258,7 +1619,9 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="font-bold">Referral Bonus</p>
-              <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Invite someone → your investment period extends to <strong className="text-amber-400">35 months</strong></p>
+              <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                Invite someone → your investment period extends to <strong className="text-amber-400">{REFERRAL_MAX_MONTHS} months</strong>
+              </p>
             </div>
           </div>
           {user!.userCode && (
@@ -1272,7 +1635,9 @@ export default function DashboardPage() {
               </div>
               <div className={`p-4 rounded-xl ${isDarkMode ? "bg-amber-500/10 border border-amber-500/20" : "bg-amber-50 border border-amber-200"}`}>
                 <p className={`text-xs font-bold mb-1 ${isDarkMode ? "text-amber-300" : "text-amber-700"}`}>Your User Code: {user!.userCode}</p>
-                <p className={`text-xs ${isDarkMode ? "text-amber-400/70" : "text-amber-600"}`}>Share this code or the link above to extend your plan from 25 to 35 months!</p>
+                <p className={`text-xs ${isDarkMode ? "text-amber-400/70" : "text-amber-600"}`}>
+                  Share this code or the link above to extend your plan from {DEFAULT_MAX_MONTHS} to {REFERRAL_MAX_MONTHS} months!
+                </p>
               </div>
             </>
           )}

@@ -5,6 +5,9 @@ import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
 
+const DEFAULT_MAX_MONTHS  = 24;  // 2 years
+const REFERRAL_MAX_MONTHS = 30;  // 2.5 years with referral
+
 async function verifyToken(token: string): Promise<any> {
   try {
     return jwt.verify(token, JWT_SECRET);
@@ -30,7 +33,6 @@ export async function PUT(
     if (!decoded)
       return NextResponse.json({ success: false, message: "Invalid token" }, { status: 401 });
 
-    // ✅ Sirf ZENO000 approve/reject kar sakta hai
     if (decoded.userCode !== "ZENO000")
       return NextResponse.json({ success: false, message: "Access denied. Admins only." }, { status: 403 });
 
@@ -50,14 +52,16 @@ export async function PUT(
     if (payment.status !== "pending")
       return NextResponse.json({ success: false, message: `Payment is already ${payment.status}.` }, { status: 400 });
 
-    // ✅ Status update karo
     payment.status = status;
     payment.updatedAt = new Date();
 
-    // ✅ Agar approve hua toh parent ka maxInvestmentMonths 35 karo
-    // (agar user ne kisi ko refer kiya hai)
-    if (status === "approved" && user.children && user.children.length > 0) {
-      user.maxInvestmentMonths = 35;
+    // If approved and user has referred someone → extend to REFERRAL_MAX_MONTHS
+    if (status === "approved") {
+      if (user.children && user.children.length > 0) {
+        user.maxInvestmentMonths = REFERRAL_MAX_MONTHS;
+      } else if (!user.maxInvestmentMonths) {
+        user.maxInvestmentMonths = DEFAULT_MAX_MONTHS;
+      }
     }
 
     await user.save();
