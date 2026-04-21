@@ -8,7 +8,7 @@ import {
   Key, Clock, CheckCircle, XCircle,
   Copy, Zap, BarChart3, Wallet, Star, Shield, Activity,
   ShieldCheck, Network, ChevronDown, ChevronRight, Smartphone,
-  FileText
+  FileText, ArrowLeft
 } from "lucide-react";
 
 interface Payment {
@@ -95,8 +95,8 @@ interface PasswordFormData {
 
 const MONTHLY_RATE = 0.08;
 const DAYS_PER_MONTH = 30;
-const DEFAULT_MAX_MONTHS = 24;   // 2 years
-const REFERRAL_MAX_MONTHS = 30;  // 2.5 years with referral
+const DEFAULT_MAX_MONTHS = 24;
+const REFERRAL_MAX_MONTHS = 30;
 const SUPER_ADMIN_CODE = "ZENO000";
 
 function getDailyInterest(amount: number) {
@@ -112,6 +112,45 @@ function getStatusConfig(status: string) {
     default:
       return { icon: Clock, color: "text-amber-400", bg: "bg-amber-400/10 border-amber-400/30", label: "Pending" };
   }
+}
+
+async function enrichWithPayments(node: any, token: string): Promise<UserNode> {
+  let payments: Payment[] = [];
+  try {
+    const res = await fetch(`/api/users/${node._id}/payments`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const d = await res.json();
+      payments = d.success ? d.data : [];
+    }
+  } catch {
+    // payment fetch failed — still recurse children
+  }
+
+  const approved = payments.filter(p => p.status === "approved");
+  const pending  = payments.filter(p => p.status === "pending");
+  const paymentSummary: PaymentSummary = {
+    totalInvested:       approved.reduce((s, p) => s + p.amount, 0),
+    approvedCount:       approved.length,
+    pendingCount:        pending.length,
+    totalInterestEarned: approved.reduce((s, p) => s + (p.investmentCalc?.totalInterest || 0), 0),
+  };
+
+  const children: UserNode[] = node.children?.length
+    ? await Promise.all(
+        node.children
+          .filter((c: any) => c && typeof c === "object" && c._id)
+          .map((c: any) => enrichWithPayments(c, token))
+      )
+    : [];
+
+  return {
+    ...node,
+    payments,
+    paymentSummary,
+    children,
+  };
 }
 
 // ─── Admin Panel ─────────────────────────────────────────────────────────────
@@ -182,39 +221,36 @@ function AdminPanel({ isDarkMode, card }: { isDarkMode: boolean; card: string })
   const pendingCount = payments.filter((p) => p.status === "pending").length;
 
   const statusStyle = {
-    pending: "bg-amber-400/10 text-amber-400 border-amber-400/30",
+    pending:  "bg-amber-400/10 text-amber-400 border-amber-400/30",
     approved: "bg-emerald-400/10 text-emerald-400 border-emerald-400/30",
     rejected: "bg-red-400/10 text-red-400 border-red-400/30",
   };
 
   return (
-    <div className="space-y-5 max-w-4xl mx-auto">
+    <div className="space-y-4 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black flex items-center gap-2">
-            <ShieldCheck className="w-6 h-6 text-amber-400" /> Admin Panel
+          <h1 className="text-xl md:text-2xl font-black flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 md:w-6 md:h-6 text-amber-400" /> Admin Panel
           </h1>
-          <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+          <p className={`text-xs md:text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
             Approve or reject user investments
           </p>
         </div>
-        <button
-          onClick={fetchPayments}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold ${isDarkMode ? "bg-white/5 hover:bg-white/10 text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}
-        >
+        <button onClick={fetchPayments} className={`px-3 py-2 rounded-xl text-xs md:text-sm font-semibold ${isDarkMode ? "bg-white/5 hover:bg-white/10 text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}>
           Refresh
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2 md:gap-3">
         {[
-          { label: "Total",    value: payments.length,                                     color: "from-blue-500 to-blue-600"       },
-          { label: "Pending",  value: pendingCount,                                        color: "from-amber-500 to-orange-500"    },
+          { label: "Total",    value: payments.length,                                      color: "from-blue-500 to-blue-600"       },
+          { label: "Pending",  value: pendingCount,                                         color: "from-amber-500 to-orange-500"    },
           { label: "Approved", value: payments.filter(p => p.status === "approved").length, color: "from-emerald-500 to-emerald-600" },
         ].map((s) => (
-          <div key={s.label} className={`${card} p-4`}>
+          <div key={s.label} className={`${card} p-3 md:p-4`}>
             <p className={`text-xs mb-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{s.label}</p>
-            <p className={`text-2xl font-black bg-gradient-to-r ${s.color} bg-clip-text text-transparent`}>{s.value}</p>
+            <p className={`text-xl md:text-2xl font-black bg-gradient-to-r ${s.color} bg-clip-text text-transparent`}>{s.value}</p>
           </div>
         ))}
       </div>
@@ -224,10 +260,8 @@ function AdminPanel({ isDarkMode, card }: { isDarkMode: boolean; card: string })
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold capitalize transition-all ${
-              filter === f
-                ? "bg-amber-500 text-black"
-                : isDarkMode ? "bg-white/5 text-gray-400 hover:bg-white/10" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            className={`px-3 py-1.5 rounded-xl text-xs md:text-sm font-semibold capitalize transition-all ${
+              filter === f ? "bg-amber-500 text-black" : isDarkMode ? "bg-white/5 text-gray-400 hover:bg-white/10" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
           >
             {f}
@@ -239,8 +273,8 @@ function AdminPanel({ isDarkMode, card }: { isDarkMode: boolean; card: string })
       </div>
 
       {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400 text-sm">
-          <AlertCircle className="w-4 h-4" /> {error}
+        <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400 text-xs md:text-sm">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
         </div>
       )}
 
@@ -256,67 +290,51 @@ function AdminPanel({ isDarkMode, card }: { isDarkMode: boolean; card: string })
       ) : (
         <div className="space-y-3">
           {filtered.map((payment) => (
-            <div key={payment._id} className={`${card} p-5`}>
-              <div className="flex items-start justify-between mb-4">
+            <div key={payment._id} className={`${card} p-4 md:p-5`}>
+              <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center text-white font-black text-sm">
+                  <div className="w-9 h-9 md:w-10 md:h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center text-white font-black text-sm flex-shrink-0">
                     {payment.userName.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <p className="font-bold">{payment.userName}</p>
+                    <p className="font-bold text-sm">{payment.userName}</p>
                     <p className="text-xs text-amber-400 font-mono">{payment.userCode}</p>
                     <p className={`text-xs ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>{payment.userMobile}</p>
                   </div>
                 </div>
-                <div className={`px-3 py-1.5 rounded-full border text-xs font-semibold ${statusStyle[payment.status]}`}>
+                <div className={`px-2 py-1 rounded-full border text-xs font-semibold ${statusStyle[payment.status]}`}>
                   {payment.status}
                 </div>
               </div>
-
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-3">
                 <div>
-                  <p className="text-2xl font-black">
-                    {payment.amount} <span className="text-sm font-normal text-gray-400">USDT</span>
+                  <p className="text-xl md:text-2xl font-black">
+                    {payment.amount} <span className="text-xs md:text-sm font-normal text-gray-400">USDT</span>
                   </p>
                   <p className={`text-xs ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>
-                    {new Date(payment.createdAt).toLocaleDateString("en-IN", {
-                      day: "numeric", month: "short", year: "numeric",
-                      hour: "2-digit", minute: "2-digit"
-                    })}
+                    {new Date(payment.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                   </p>
-                  {payment.description && (
-                    <p className={`text-xs mt-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{payment.description}</p>
-                  )}
                 </div>
-                <button
-                  onClick={() => window.open(payment.screenshot, "_blank")}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm transition-all ${isDarkMode ? "bg-white/5 hover:bg-white/10" : "bg-gray-100 hover:bg-gray-200"}`}
-                >
-                  <Eye className="w-4 h-4" /> Screenshot
+                <button onClick={() => window.open(payment.screenshot, "_blank")} className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs md:text-sm transition-all ${isDarkMode ? "bg-white/5 hover:bg-white/10" : "bg-gray-100 hover:bg-gray-200"}`}>
+                  <Eye className="w-3.5 h-3.5" /> View
                 </button>
               </div>
-
               {payment.status === "pending" && (
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleAction(payment.userId, payment._id, "approved")}
                     disabled={actionLoading === payment._id}
-                    className="flex-1 flex items-center justify-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold py-3 rounded-xl transition-all disabled:opacity-50"
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold py-2.5 rounded-xl transition-all disabled:opacity-50 text-sm"
                   >
-                    {actionLoading === payment._id ? (
-                      <div className="w-4 h-4 border-2 border-t-transparent border-emerald-400 rounded-full animate-spin" />
-                    ) : (
-                      <CheckCircle className="w-4 h-4" />
-                    )}
+                    {actionLoading === payment._id ? <div className="w-4 h-4 border-2 border-t-transparent border-emerald-400 rounded-full animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                     Approve
                   </button>
                   <button
                     onClick={() => handleAction(payment.userId, payment._id, "rejected")}
                     disabled={actionLoading === payment._id}
-                    className="flex-1 flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold py-3 rounded-xl transition-all disabled:opacity-50"
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold py-2.5 rounded-xl transition-all disabled:opacity-50 text-sm"
                   >
-                    <XCircle className="w-4 h-4" />
-                    Reject
+                    <XCircle className="w-4 h-4" /> Reject
                   </button>
                 </div>
               )}
@@ -361,39 +379,6 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
     }
   };
 
-  const enrichWithPayments = async (node: any, token: string, level = 0): Promise<UserNode> => {
-    try {
-      const res = await fetch(`/api/users/${node._id}/payments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      let payments: Payment[] = [];
-      if (res.ok) {
-        const d = await res.json();
-        payments = d.success ? d.data : [];
-      }
-      const approved = payments.filter(p => p.status === "approved");
-      const pending  = payments.filter(p => p.status === "pending");
-      const paymentSummary: PaymentSummary = {
-        totalInvested:       approved.reduce((s, p) => s + p.amount, 0),
-        approvedCount:       approved.length,
-        pendingCount:        pending.length,
-        totalInterestEarned: approved.reduce((s, p) => s + (p.investmentCalc?.totalInterest || 0), 0),
-      };
-      const children: UserNode[] = node.children?.length
-        ? await Promise.all(node.children.map((c: any) => enrichWithPayments(c, token, level + 1)))
-        : [];
-      return { ...node, payments, paymentSummary, children, level };
-    } catch {
-      return {
-        ...node,
-        payments: [],
-        paymentSummary: { totalInvested: 0, approvedCount: 0, pendingCount: 0, totalInterestEarned: 0 },
-        children: node.children || [],
-        level,
-      };
-    }
-  };
-
   const toggleNode = (id: string) => {
     setExpandedNodes(prev => {
       const next = new Set(prev);
@@ -413,7 +398,6 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
     "from-emerald-500 to-teal-500",
     "from-amber-500 to-orange-500",
   ];
-
   const getGradient = (name: string) => avatarGradients[name.charCodeAt(0) % avatarGradients.length];
 
   const renderNode = (node: UserNode): React.ReactElement => {
@@ -423,82 +407,55 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
     const ps          = node.paymentSummary;
 
     return (
-      <div key={node._id} className="mb-3">
+      <div key={node._id} className="mb-2">
         <div
           className={`rounded-2xl border transition-all ${
             isRoot
               ? "bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-amber-500/40"
-              : isDarkMode
-              ? "bg-white/3 border-white/8 hover:bg-white/6"
-              : "bg-white border-gray-200 hover:bg-gray-50"
+              : isDarkMode ? "bg-white/3 border-white/8 hover:bg-white/6" : "bg-white border-gray-200 hover:bg-gray-50"
           }`}
-          style={{ marginLeft: `${Math.min(node.level * 24, 72)}px` }}
+          style={{ marginLeft: `${Math.min(node.level * 20, 60)}px` }}
         >
-          <div
-            className="flex items-center gap-3 p-4 cursor-pointer"
-            onClick={() => hasChildren && toggleNode(node._id)}
-          >
-            <div className="w-5 flex-shrink-0">
+          <div className="flex items-center gap-2 p-3 md:p-4 cursor-pointer" onClick={() => hasChildren && toggleNode(node._id)}>
+            <div className="w-5 flex-shrink-0 flex items-center justify-center">
               {hasChildren ? (
-                isExpanded
-                  ? <ChevronDown className="w-4 h-4 text-gray-400" />
-                  : <ChevronRight className="w-4 h-4 text-gray-400" />
-              ) : null}
+                isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />
+              ) : <span className="w-4" />}
             </div>
-            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${getGradient(node.name)} flex items-center justify-center text-white font-black text-sm flex-shrink-0`}>
+            <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${getGradient(node.name)} flex items-center justify-center text-white font-black text-xs flex-shrink-0`}>
               {getInitials(node.name)}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-bold text-sm">{node.name}</p>
-                {isRoot && (
-                  <span className="bg-amber-400 text-amber-900 px-2 py-0.5 rounded-full text-xs font-bold">YOU</span>
-                )}
-                {node.userCode && (
-                  <span className="font-mono text-xs text-amber-400">{node.userCode}</span>
-                )}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <p className="font-bold text-sm truncate">{node.name}</p>
+                {isRoot && <span className="bg-amber-400 text-amber-900 px-1.5 py-0.5 rounded-full text-xs font-bold flex-shrink-0">YOU</span>}
+                {node.userCode && <span className="font-mono text-xs text-amber-400 flex-shrink-0">{node.userCode}</span>}
               </div>
-              <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                <span className={`text-xs flex items-center gap-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                  <Smartphone className="w-3 h-3" />{node.mobile}
-                </span>
-                {node.email && (
-                  <span className={`text-xs flex items-center gap-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                    <Mail className="w-3 h-3" />{node.email}
-                  </span>
-                )}
-              </div>
+              <p className={`text-xs truncate ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{node.mobile}</p>
             </div>
             {hasChildren && (
-              <div className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${
-                isDarkMode ? "bg-white/8 text-gray-300" : "bg-gray-100 text-gray-600"
-              }`}>
-                <Users className="w-3 h-3" />
-                {node.children.length}
+              <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${isDarkMode ? "bg-white/8 text-gray-300" : "bg-gray-100 text-gray-600"}`}>
+                <Users className="w-3 h-3" />{node.children.length}
               </div>
             )}
           </div>
-
-          <div className={`mx-4 mb-4 p-3 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-3 ${
-            isDarkMode ? "bg-white/5" : "bg-gray-50"
-          }`}>
+          <div className={`mx-3 mb-3 p-2.5 rounded-xl grid grid-cols-2 md:grid-cols-4 gap-2 ${isDarkMode ? "bg-white/5" : "bg-gray-50"}`}>
             {[
-              { label: "Invested",  value: `${ps.totalInvested} USDT`,                    icon: Wallet,      color: "text-blue-400"    },
-              { label: "Interest",  value: `${ps.totalInterestEarned.toFixed(2)} USDT`,   icon: TrendingUp,  color: "text-emerald-400" },
-              { label: "Approved",  value: `${ps.approvedCount} plans`,                   icon: CheckCircle, color: "text-emerald-400" },
-              { label: "Pending",   value: `${ps.pendingCount} plans`,                    icon: Clock,       color: "text-amber-400"   },
+              { label: "Invested",  value: `${ps.totalInvested} USDT`,                  icon: Wallet,      color: "text-blue-400"    },
+              { label: "Interest",  value: `${ps.totalInterestEarned.toFixed(2)} USDT`, icon: TrendingUp,  color: "text-emerald-400" },
+              { label: "Approved",  value: `${ps.approvedCount} plans`,                 icon: CheckCircle, color: "text-emerald-400" },
+              { label: "Pending",   value: `${ps.pendingCount} plans`,                  icon: Clock,       color: "text-amber-400"   },
             ].map(({ label, value, icon: Icon, color }) => (
               <div key={label} className="text-center">
-                <Icon className={`w-4 h-4 mx-auto mb-1 ${color}`} />
+                <Icon className={`w-3.5 h-3.5 mx-auto mb-0.5 ${color}`} />
                 <p className={`text-xs mb-0.5 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>{label}</p>
                 <p className="font-bold text-xs">{value}</p>
               </div>
             ))}
           </div>
         </div>
-
         {hasChildren && isExpanded && (
-          <div className={`mt-2 ml-6 pl-4 border-l-2 border-dashed ${isDarkMode ? "border-white/10" : "border-gray-200"}`}>
+          <div className={`mt-1.5 ml-4 pl-3 border-l-2 border-dashed ${isDarkMode ? "border-white/10" : "border-gray-200"}`}>
             {node.children.map(child => renderNode(child))}
           </div>
         )}
@@ -506,60 +463,35 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
     );
   };
 
-  if (loading) return (
-    <div className="flex justify-center py-16">
-      <div className="w-10 h-10 border-4 border-t-transparent border-amber-400 rounded-full animate-spin" />
-    </div>
-  );
-
-  if (error) return (
-    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400 text-sm">
-      <AlertCircle className="w-4 h-4" /> {error}
-    </div>
-  );
-
-  if (!hierarchyData) return (
-    <div className={`${card} p-12 text-center`}>
-      <Users className="w-12 h-12 mx-auto mb-3 text-gray-600" />
-      <p className={isDarkMode ? "text-gray-400" : "text-gray-500"}>
-        No network data found. Share your referral link to start building your network.
-      </p>
-    </div>
-  );
+  if (loading) return <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-t-transparent border-amber-400 rounded-full animate-spin" /></div>;
+  if (error) return <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400 text-sm"><AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}</div>;
+  if (!hierarchyData) return <div className={`${card} p-12 text-center`}><Users className="w-12 h-12 mx-auto mb-3 text-gray-600" /><p className={isDarkMode ? "text-gray-400" : "text-gray-500"}>No network data found.</p></div>;
 
   const countAll = (node: UserNode): number =>
     (node.children?.length || 0) + (node.children?.reduce((s, c) => s + countAll(c), 0) || 0);
-
   const totalMembers = countAll(hierarchyData);
 
   return (
-    <div className="space-y-5 max-w-4xl mx-auto">
+    <div className="space-y-4 max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black flex items-center gap-2">
-            <Network className="w-6 h-6 text-amber-400" /> My Network
+          <h1 className="text-xl md:text-2xl font-black flex items-center gap-2">
+            <Network className="w-5 h-5 md:w-6 md:h-6 text-amber-400" /> My Network
           </h1>
-          <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+          <p className={`text-xs md:text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
             {totalMembers} member{totalMembers !== 1 ? "s" : ""} in your network
           </p>
         </div>
-        <button
-          onClick={fetchNetwork}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold ${
-            isDarkMode ? "bg-white/5 hover:bg-white/10 text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-700"
-          }`}
-        >
+        <button onClick={fetchNetwork} className={`px-3 py-2 rounded-xl text-xs md:text-sm font-semibold ${isDarkMode ? "bg-white/5 hover:bg-white/10 text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}>
           Refresh
         </button>
       </div>
-      <div className={`${card} p-4 md:p-6`}>
-        {renderNode(hierarchyData)}
-      </div>
+      <div className={`${card} p-3 md:p-5`}>{renderNode(hierarchyData)}</div>
     </div>
   );
 }
 
-// ─── Statistics Panel ──────────────────────────────────────────────────────────
+// ─── Membership Component ─────────────────────────────────────────────────────────
 
 interface LevelStats {
   level: number;
@@ -570,7 +502,7 @@ interface LevelStats {
   totalBusiness: number;
 }
 
-function StatisticsPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode: boolean; card: string }) {
+function Membership({ userId, isDarkMode, card }: { userId: string; isDarkMode: boolean; card: string }) {
   const [hierarchyData, setHierarchyData] = useState<UserNode | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -591,92 +523,58 @@ function StatisticsPanel({ userId, isDarkMode, card }: { userId: string; isDarkM
         const enriched = await enrichWithPayments(data.data, token!);
         setHierarchyData(enriched);
       } else {
-        setError(data.message || "Failed to load statistics");
+        setError(data.message || "Failed to load membership data");
       }
     } catch {
-      setError("Failed to load statistics");
+      setError("Failed to load membership data");
     } finally {
       setLoading(false);
     }
   };
 
-  const enrichWithPayments = async (node: any, token: string, level = 0): Promise<UserNode> => {
-    try {
-      const res = await fetch(`/api/users/${node._id}/payments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      let payments: Payment[] = [];
-      if (res.ok) {
-        const d = await res.json();
-        payments = d.success ? d.data : [];
-      }
-      const approved = payments.filter(p => p.status === "approved");
-      const pending  = payments.filter(p => p.status === "pending");
-      const paymentSummary: PaymentSummary = {
-        totalInvested:       approved.reduce((s, p) => s + p.amount, 0),
-        approvedCount:       approved.length,
-        pendingCount:        pending.length,
-        totalInterestEarned: approved.reduce((s, p) => s + (p.investmentCalc?.totalInterest || 0), 0),
-      };
-      const children: UserNode[] = node.children?.length
-        ? await Promise.all(node.children.map((c: any) => enrichWithPayments(c, token, level + 1)))
-        : [];
-      return { ...node, payments, paymentSummary, children, level };
-    } catch {
-      return {
-        ...node,
-        payments: [],
-        paymentSummary: { totalInvested: 0, approvedCount: 0, pendingCount: 0, totalInterestEarned: 0 },
-        children: node.children || [],
-        level,
-      };
-    }
-  };
-
   const getLevelStats = (root: UserNode): LevelStats[] => {
     const levelMap: Map<number, UserNode[]> = new Map();
+
     const traverse = (node: UserNode) => {
       if (node.level > 0) {
         const existing = levelMap.get(node.level) || [];
         existing.push(node);
         levelMap.set(node.level, existing);
       }
-      node.children?.forEach(child => traverse(child));
+      if (node.children?.length) {
+        node.children.forEach(child => traverse(child));
+      }
     };
+
     traverse(root);
+
     return Array.from(levelMap.entries())
       .sort(([a], [b]) => a - b)
       .map(([level, members]) => ({
         level,
         members,
-        totalMembers:    members.length,
-        activeMembers:   members.filter(m => m.paymentSummary.approvedCount > 0).length,
+        totalMembers: members.length,
+        activeMembers: members.filter(m => m.paymentSummary.approvedCount > 0).length,
         inactiveMembers: members.filter(m => m.paymentSummary.approvedCount === 0).length,
-        totalBusiness:   members.reduce((s, m) => s + m.paymentSummary.totalInvested, 0),
+        totalBusiness: members.reduce((s, m) => s + m.paymentSummary.totalInvested, 0),
       }));
   };
 
   const levelColors = [
-    { badge: isDarkMode ? "bg-blue-500/20 text-blue-300"    : "bg-blue-100 text-blue-700",    bar: "border-l-blue-400",    btn: isDarkMode ? "bg-blue-500/20 text-blue-300 border-blue-400/40"    : "bg-blue-50 text-blue-700 border-blue-200"    },
-    { badge: isDarkMode ? "bg-purple-500/20 text-purple-300" : "bg-purple-100 text-purple-700", bar: "border-l-purple-400",  btn: isDarkMode ? "bg-purple-500/20 text-purple-300 border-purple-400/40" : "bg-purple-50 text-purple-700 border-purple-200" },
-    { badge: isDarkMode ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-100 text-emerald-700", bar: "border-l-emerald-400", btn: isDarkMode ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40" : "bg-emerald-50 text-emerald-700 border-emerald-200" },
-    { badge: isDarkMode ? "bg-amber-500/20 text-amber-300"   : "bg-amber-100 text-amber-700",   bar: "border-l-amber-400",   btn: isDarkMode ? "bg-amber-500/20 text-amber-300 border-amber-400/40"   : "bg-amber-50 text-amber-700 border-amber-200"   },
-    { badge: isDarkMode ? "bg-pink-500/20 text-pink-300"     : "bg-pink-100 text-pink-700",     bar: "border-l-pink-400",    btn: isDarkMode ? "bg-pink-500/20 text-pink-300 border-pink-400/40"     : "bg-pink-50 text-pink-700 border-pink-200"     },
+    { badge: isDarkMode ? "bg-blue-500/20 text-blue-300" : "bg-blue-100 text-blue-700", bar: "from-blue-400 to-blue-500", dot: "bg-blue-400" },
+    { badge: isDarkMode ? "bg-purple-500/20 text-purple-300" : "bg-purple-100 text-purple-700", bar: "from-purple-400 to-purple-500", dot: "bg-purple-400" },
+    { badge: isDarkMode ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-100 text-emerald-700", bar: "from-emerald-400 to-emerald-500", dot: "bg-emerald-400" },
+    { badge: isDarkMode ? "bg-amber-500/20 text-amber-300" : "bg-amber-100 text-amber-700", bar: "from-amber-400 to-amber-500", dot: "bg-amber-400" },
+    { badge: isDarkMode ? "bg-pink-500/20 text-pink-300" : "bg-pink-100 text-pink-700", bar: "from-pink-400 to-pink-500", dot: "bg-pink-400" },
   ];
-
   const getColor = (level: number) => levelColors[(level - 1) % levelColors.length];
 
   const getInitials = (name: string) => {
     const w = name.trim().split(" ");
     return w.length >= 2 ? (w[0][0] + w[w.length - 1][0]).toUpperCase() : name.substring(0, 2).toUpperCase();
   };
-
-  const avatarGradients = [
-    "from-purple-500 to-pink-500",
-    "from-blue-500 to-cyan-500",
-    "from-emerald-500 to-teal-500",
-    "from-amber-500 to-orange-500",
-  ];
+  
+  const avatarGradients = ["from-purple-500 to-pink-500", "from-blue-500 to-cyan-500", "from-emerald-500 to-teal-500", "from-amber-500 to-orange-500"];
   const getGrad = (name: string) => avatarGradients[name.charCodeAt(0) % avatarGradients.length];
 
   if (loading) return (
@@ -684,157 +582,215 @@ function StatisticsPanel({ userId, isDarkMode, card }: { userId: string; isDarkM
       <div className="w-10 h-10 border-4 border-t-transparent border-amber-400 rounded-full animate-spin" />
     </div>
   );
-
+  
   if (error) return (
     <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400 text-sm">
-      <AlertCircle className="w-4 h-4" /> {error}
+      <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
     </div>
   );
-
+  
   if (!hierarchyData) return (
     <div className={`${card} p-12 text-center`}>
-      <BarChart3 className="w-12 h-12 mx-auto mb-3 text-gray-600" />
+      <Users className="w-12 h-12 mx-auto mb-3 text-gray-600" />
       <p className={isDarkMode ? "text-gray-400" : "text-gray-500"}>No network data yet.</p>
     </div>
   );
 
   const levelStats = getLevelStats(hierarchyData);
-  const totalAll      = levelStats.reduce((s, l) => s + l.totalMembers, 0);
-  const totalActive   = levelStats.reduce((s, l) => s + l.activeMembers, 0);
+  const totalAll = levelStats.reduce((s, l) => s + l.totalMembers, 0);
+  const totalActive = levelStats.reduce((s, l) => s + l.activeMembers, 0);
   const totalInactive = levelStats.reduce((s, l) => s + l.inactiveMembers, 0);
   const totalBusiness = levelStats.reduce((s, l) => s + l.totalBusiness, 0);
 
-  // ── Level Detail View ────────────────────────────────────────────────────
+  // Level Detail View
   if (selectedLevel) {
     const color = getColor(selectedLevel.level);
     return (
-      <div className="space-y-5 max-w-4xl mx-auto">
+      <div className="space-y-4 max-w-4xl mx-auto">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setSelectedLevel(null)}
-            className={`p-2 rounded-xl ${isDarkMode ? "bg-white/5 hover:bg-white/10" : "bg-gray-100 hover:bg-gray-200"}`}
+          <button 
+            onClick={() => setSelectedLevel(null)} 
+            className={`p-2 rounded-xl flex-shrink-0 ${isDarkMode ? "bg-white/5 hover:bg-white/10" : "bg-gray-100 hover:bg-gray-200"}`}
           >
-            <ChevronRight className="w-5 h-5 rotate-180" />
+            <ArrowLeft className="w-4 h-4" />
           </button>
-          <div>
-            <h1 className="text-2xl font-black flex items-center gap-2">
-              <span className={`px-3 py-1 rounded-full text-sm ${color.badge}`}>Level {selectedLevel.level}</span>
-              Members
-            </h1>
-            <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-              {selectedLevel.totalMembers} total · {selectedLevel.activeMembers} active · {selectedLevel.inactiveMembers} inactive
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg md:text-2xl font-black">Level {selectedLevel.level}</h1>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${color.badge}`}>
+                {selectedLevel.totalMembers} members
+              </span>
+            </div>
+            <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+              {selectedLevel.activeMembers} active · {selectedLevel.inactiveMembers} inactive
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: "Total",    value: String(selectedLevel.totalMembers),                    col: isDarkMode ? "text-white" : "text-gray-900"  },
-            { label: "Active",   value: String(selectedLevel.activeMembers),                   col: "text-emerald-400"                           },
-            { label: "Inactive", value: String(selectedLevel.inactiveMembers),                 col: "text-amber-400"                             },
-            { label: "Business", value: `${selectedLevel.totalBusiness.toFixed(0)} USDT`,      col: "text-blue-400"                              },
-          ].map(s => (
-            <div key={s.label} className={`${card} p-4`}>
-              <p className={`text-xs mb-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{s.label}</p>
-              <p className={`text-xl font-black ${s.col}`}>{s.value}</p>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-2">
+          <div className={`${card} p-3`}>
+            <p className={`text-xs mb-0.5 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Active Members</p>
+            <p className="text-lg font-black text-emerald-400">{selectedLevel.activeMembers}</p>
+          </div>
+          <div className={`${card} p-3`}>
+            <p className={`text-xs mb-0.5 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Total Business</p>
+            <p className="text-lg font-black text-blue-400">{selectedLevel.totalBusiness.toFixed(0)} USDT</p>
+          </div>
         </div>
 
-        <div className="space-y-3">
-          {selectedLevel.members.map(member => {
-            const isActive = member.paymentSummary.approvedCount > 0;
-            return (
-              <div key={member._id} className={`${card} p-4`}>
-                <div className="flex items-start gap-3">
-                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${getGrad(member.name)} flex items-center justify-center text-white font-black text-sm flex-shrink-0`}>
-                    {getInitials(member.name)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <p className="font-bold text-sm">{member.name}</p>
-                      {member.userCode && <span className="font-mono text-xs text-amber-400">{member.userCode}</span>}
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
-                        isActive ? "bg-emerald-500/15 text-emerald-400" : "bg-gray-500/15 text-gray-400"
-                      }`}>
-                        {isActive ? "Active" : "Inactive"}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <span className={`text-xs flex items-center gap-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                        <Smartphone className="w-3 h-3" />{member.mobile}
-                      </span>
-                      {member.email && (
-                        <span className={`text-xs flex items-center gap-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                          <Mail className="w-3 h-3" />{member.email}
+        <div className={`${card} overflow-hidden`}>
+          <div className={`px-4 py-3 border-b ${isDarkMode ? "border-white/5" : "border-gray-100"}`}>
+            <p className="font-bold text-sm">All Members — Level {selectedLevel.level}</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className={`text-xs uppercase tracking-wider ${isDarkMode ? "bg-white/3 text-gray-400" : "bg-gray-50 text-gray-500"}`}>
+                  <th className="px-4 py-3 text-left">#</th>
+                  <th className="px-4 py-3 text-left">Member</th>
+                  <th className="px-4 py-3 text-left hidden md:table-cell">Code</th>
+                  <th className="px-4 py-3 text-left hidden md:table-cell">Mobile</th>
+                  <th className="px-4 py-3 text-right">Invested</th>
+                  <th className="px-4 py-3 text-right hidden sm:table-cell">Interest</th>
+                  <th className="px-4 py-3 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className={`divide-y ${isDarkMode ? "divide-white/5" : "divide-gray-100"}`}>
+                {selectedLevel.members.map((member, idx) => {
+                  const isActive = member.paymentSummary.approvedCount > 0;
+                  return (
+                    <tr key={member._id} className={`transition-colors ${isDarkMode ? "hover:bg-white/3" : "hover:bg-gray-50"}`}>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-bold ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>{idx + 1}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${getGrad(member.name)} flex items-center justify-center text-white font-black text-xs flex-shrink-0`}>
+                            {getInitials(member.name)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-sm truncate max-w-[100px] md:max-w-none">{member.name}</p>
+                            <p className={`text-xs md:hidden ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{member.mobile}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 hidden md:table-cell">
+                        {member.userCode ? (
+                          <span className="font-mono text-xs text-amber-400">{member.userCode}</span>
+                        ) : (
+                          <span className={`text-xs ${isDarkMode ? "text-gray-600" : "text-gray-400"}`}>—</span>
+                        )}
+                      </td>
+                      <td className={`px-4 py-3 text-xs hidden md:table-cell ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+                        {member.mobile}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`font-bold text-sm ${member.paymentSummary.totalInvested > 0 ? "text-blue-400" : isDarkMode ? "text-gray-600" : "text-gray-300"}`}>
+                          {member.paymentSummary.totalInvested > 0 ? `${member.paymentSummary.totalInvested}` : "—"}
                         </span>
-                      )}
-                      <span className={`text-xs flex items-center gap-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                        <Clock className="w-3 h-3" />
-                        Joined {new Date(member.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className={`mt-3 grid grid-cols-2 md:grid-cols-4 gap-2 p-3 rounded-xl ${isDarkMode ? "bg-white/5" : "bg-gray-50"}`}>
-                  {[
-                    { label: "Invested",  value: `${member.paymentSummary.totalInvested} USDT`,                  icon: Wallet,      color: "text-blue-400"    },
-                    { label: "Interest",  value: `${member.paymentSummary.totalInterestEarned.toFixed(2)} USDT`, icon: TrendingUp,  color: "text-emerald-400" },
-                    { label: "Approved",  value: `${member.paymentSummary.approvedCount} plans`,                 icon: CheckCircle, color: "text-emerald-400" },
-                    { label: "Pending",   value: `${member.paymentSummary.pendingCount} plans`,                  icon: Clock,       color: "text-amber-400"   },
-                  ].map(({ label, value, icon: Icon, color }) => (
-                    <div key={label} className="text-center">
-                      <Icon className={`w-3.5 h-3.5 mx-auto mb-1 ${color}`} />
-                      <p className={`text-xs mb-0.5 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>{label}</p>
-                      <p className="font-bold text-xs">{value}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+                        {member.paymentSummary.totalInvested > 0 && (
+                          <span className={`text-xs ml-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>USDT</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right hidden sm:table-cell">
+                        <span className={`font-bold text-sm ${member.paymentSummary.totalInterestEarned > 0 ? "text-emerald-400" : isDarkMode ? "text-gray-600" : "text-gray-300"}`}>
+                          {member.paymentSummary.totalInterestEarned > 0 ? member.paymentSummary.totalInterestEarned.toFixed(2) : "—"}
+                        </span>
+                        {member.paymentSummary.totalInterestEarned > 0 && (
+                          <span className={`text-xs ml-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>USDT</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                          isActive
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                            : isDarkMode ? "bg-white/5 text-gray-500 border border-white/10" : "bg-gray-100 text-gray-400 border border-gray-200"
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-emerald-400" : isDarkMode ? "bg-gray-600" : "bg-gray-300"}`} />
+                          {isActive ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className={`text-xs font-bold border-t-2 ${isDarkMode ? "border-white/10 bg-white/3 text-gray-300" : "border-gray-200 bg-gray-50 text-gray-700"}`}>
+                  <td className="px-4 py-3" colSpan={2}>Total</td>
+                  <td className="hidden md:table-cell"></td>
+                  <td className="hidden md:table-cell"></td>
+                  <td className="px-4 py-3 text-right text-blue-400">{selectedLevel.totalBusiness.toFixed(0)} USDT</td>
+                  <td className="px-4 py-3 text-right text-emerald-400 hidden sm:table-cell">
+                    {selectedLevel.members.reduce((s, m) => s + m.paymentSummary.totalInterestEarned, 0).toFixed(2)} USDT
+                  </td>
+                  <td className="px-4 py-3 text-center text-emerald-400">{selectedLevel.activeMembers} active</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
+
+        <p className={`text-xs text-center ${isDarkMode ? "text-gray-600" : "text-gray-400"}`}>
+          {selectedLevel.members.length} member{selectedLevel.members.length !== 1 ? "s" : ""} at level {selectedLevel.level}
+        </p>
       </div>
     );
   }
 
-  // ── Main Statistics View ──────────────────────────────────────────────────
+  // Main Membership View - Table Format
   return (
-    <div className="space-y-5 max-w-4xl mx-auto">
+    <div className="space-y-4 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-amber-400" /> Network Statistics
+          <h1 className="text-xl md:text-2xl font-black flex items-center gap-2">
+            <Users className="w-5 h-5 md:w-6 md:h-6 text-amber-400" /> Membership
           </h1>
-          <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-            Hierarchy breakdown by level
+          <p className={`text-xs md:text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+            Network breakdown by level
           </p>
         </div>
-        <button
-          onClick={fetchStats}
-          className={`px-4 py-2 rounded-xl text-sm font-semibold ${isDarkMode ? "bg-white/5 hover:bg-white/10 text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}
+        <button 
+          onClick={fetchStats} 
+          className={`px-3 py-2 rounded-xl text-xs md:text-sm font-semibold ${isDarkMode ? "bg-white/5 hover:bg-white/10 text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}
         >
           Refresh
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: "Total Members",  value: String(totalAll),                        color: "from-blue-500 to-blue-600",       icon: Users     },
-          { label: "Active",         value: String(totalActive),                     color: "from-emerald-500 to-emerald-600", icon: Activity  },
-          { label: "Inactive",       value: String(totalInactive),                   color: "from-amber-500 to-orange-500",    icon: Clock     },
-          { label: "Total Business", value: `${totalBusiness.toFixed(0)} USDT`,      color: "from-purple-500 to-purple-600",   icon: Wallet    },
-        ].map((s, i) => (
-          <div key={i} className={`${card} p-4 relative overflow-hidden`}>
-            <div className={`absolute top-0 right-0 w-14 h-14 bg-gradient-to-br ${s.color} opacity-10 rounded-full -mr-3 -mt-3`} />
-            <div className={`w-8 h-8 bg-gradient-to-br ${s.color} rounded-lg flex items-center justify-center mb-2`}>
-              <s.icon className="w-4 h-4 text-white" />
-            </div>
-            <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}>{s.label}</p>
-            <p className="font-bold text-lg">{s.value}</p>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+        <div className={`${card} p-3 md:p-4 relative overflow-hidden`}>
+          <div className="absolute top-0 right-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 opacity-10 rounded-full -mr-2 -mt-2" />
+          <div className="w-7 h-7 md:w-8 md:h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center mb-2">
+            <Users className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
           </div>
-        ))}
+          <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-0.5`}>Total Members</p>
+          <p className="font-bold text-base md:text-lg">{totalAll}</p>
+        </div>
+        <div className={`${card} p-3 md:p-4 relative overflow-hidden`}>
+          <div className="absolute top-0 right-0 w-12 h-12 bg-gradient-to-br from-emerald-500 to-emerald-600 opacity-10 rounded-full -mr-2 -mt-2" />
+          <div className="w-7 h-7 md:w-8 md:h-8 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg flex items-center justify-center mb-2">
+            <Activity className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
+          </div>
+          <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-0.5`}>Active</p>
+          <p className="font-bold text-base md:text-lg">{totalActive}</p>
+        </div>
+        <div className={`${card} p-3 md:p-4 relative overflow-hidden`}>
+          <div className="absolute top-0 right-0 w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 opacity-10 rounded-full -mr-2 -mt-2" />
+          <div className="w-7 h-7 md:w-8 md:h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg flex items-center justify-center mb-2">
+            <Clock className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
+          </div>
+          <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-0.5`}>Inactive</p>
+          <p className="font-bold text-base md:text-lg">{totalInactive}</p>
+        </div>
+        <div className={`${card} p-3 md:p-4 relative overflow-hidden`}>
+          <div className="absolute top-0 right-0 w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 opacity-10 rounded-full -mr-2 -mt-2" />
+          <div className="w-7 h-7 md:w-8 md:h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mb-2">
+            <Wallet className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
+          </div>
+          <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-0.5`}>Total Business</p>
+          <p className="font-bold text-base md:text-lg">{totalBusiness.toFixed(0)} USDT</p>
+        </div>
       </div>
 
       {levelStats.length === 0 ? (
@@ -845,69 +801,101 @@ function StatisticsPanel({ userId, isDarkMode, card }: { userId: string; isDarkM
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {levelStats.map(ls => {
-            const color = getColor(ls.level);
-            const activePercent = ls.totalMembers > 0 ? Math.round((ls.activeMembers / ls.totalMembers) * 100) : 0;
-            return (
-              <div
-                key={ls.level}
-                className={`${card} border-l-4 ${color.bar} overflow-hidden`}
-                style={{ marginLeft: `${Math.min((ls.level - 1) * 16, 48)}px` }}
-              >
-                <div className="p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-bold px-3 py-1 rounded-full ${color.badge}`}>
-                        Level {ls.level}
-                      </span>
-                      <span className={`text-sm font-semibold ${isDarkMode ? "text-gray-200" : "text-gray-700"}`}>
-                        {ls.totalMembers} member{ls.totalMembers !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setSelectedLevel(ls)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${color.btn}`}
-                    >
-                      View details <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-                    {[
-                      { label: "Total",    value: String(ls.totalMembers),                   col: isDarkMode ? "text-white" : "text-gray-900" },
-                      { label: "Active",   value: String(ls.activeMembers),                  col: "text-emerald-400"                          },
-                      { label: "Inactive", value: String(ls.inactiveMembers),                col: "text-amber-400"                            },
-                      { label: "Business", value: `${ls.totalBusiness.toFixed(0)} USDT`,     col: "text-blue-400"                             },
-                    ].map(s => (
-                      <div key={s.label} className={`p-2.5 rounded-xl ${isDarkMode ? "bg-white/5" : "bg-gray-50"} text-center`}>
-                        <p className={`text-xs mb-0.5 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>{s.label}</p>
-                        <p className={`font-bold ${s.col}`}>{s.value}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>Active rate</span>
-                      <span>{activePercent}%</span>
-                    </div>
-                    <div className={`h-1.5 rounded-full ${isDarkMode ? "bg-white/10" : "bg-gray-200"}`}>
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-500 transition-all"
-                        style={{ width: `${activePercent}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        /* Main Membership Table */
+        <div className={`${card} overflow-hidden`}>
+          <div className={`px-4 py-3 border-b ${isDarkMode ? "border-white/5" : "border-gray-100"} flex items-center justify-between`}>
+            <p className="font-bold text-sm">Membership Breakdown by Level</p>
+            <p className={`text-xs ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>{levelStats.length} levels</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className={`text-xs uppercase tracking-wider ${isDarkMode ? "bg-white/3 text-gray-400" : "bg-gray-50 text-gray-500"}`}>
+                  <th className="px-4 py-3 text-left">Level No.</th>
+                  <th className="px-4 py-3 text-right">Member Count</th>
+                  <th className="px-4 py-3 text-right">Active Member</th>
+                  <th className="px-4 py-3 text-right hidden sm:table-cell">Inactive Member</th>
+                  <th className="px-4 py-3 text-right">Total Business (USDT)</th>
+                  <th className="px-4 py-3 text-center hidden sm:table-cell">Active %</th>
+                  <th className="px-4 py-3 text-center">Details</th>
+                 </tr>
+              </thead>
+              <tbody className={`divide-y ${isDarkMode ? "divide-white/5" : "divide-gray-100"}`}>
+                {levelStats.map(ls => {
+                  const color = getColor(ls.level);
+                  const activePercent = ls.totalMembers > 0 ? Math.round((ls.activeMembers / ls.totalMembers) * 100) : 0;
+                  return (
+                    <tr key={ls.level} className={`transition-colors ${isDarkMode ? "hover:bg-white/3" : "hover:bg-gray-50"}`}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${color.dot}`} />
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${color.badge}`}>
+                            Level {ls.level}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="font-bold text-base">{ls.totalMembers}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="font-bold text-emerald-400 text-base">{ls.activeMembers}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right hidden sm:table-cell">
+                        <span className={`font-semibold ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{ls.inactiveMembers}</span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="font-bold text-blue-400">
+                          {ls.totalBusiness > 0 ? ls.totalBusiness.toFixed(0) : "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 hidden sm:table-cell">
+                        <div className="flex items-center gap-2 justify-end">
+                          <div className={`flex-1 h-1.5 rounded-full min-w-[50px] max-w-[80px] ${isDarkMode ? "bg-white/10" : "bg-gray-200"}`}>
+                            <div
+                              className={`h-full rounded-full bg-gradient-to-r ${color.bar} transition-all`}
+                              style={{ width: `${activePercent}%` }}
+                            />
+                          </div>
+                          <span className={`text-xs font-semibold w-8 text-right ${isDarkMode ? "text-gray-300" : "text-gray-600"}`}>
+                            {activePercent}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => setSelectedLevel(ls)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            isDarkMode ? "bg-white/5 hover:bg-white/10 text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-600"
+                          }`}
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span className="hidden sm:inline">View</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className={`text-xs font-bold border-t-2 ${isDarkMode ? "border-white/10 bg-white/3 text-gray-200" : "border-gray-200 bg-gray-50 text-gray-800"}`}>
+                  <td className="px-4 py-3">Total</td>
+                  <td className="px-4 py-3 text-right text-base">{totalAll}</td>
+                  <td className="px-4 py-3 text-right text-emerald-400 text-base">{totalActive}</td>
+                  <td className="px-4 py-3 text-right hidden sm:table-cell text-gray-400">{totalInactive}</td>
+                  <td className="px-4 py-3 text-right text-blue-400 text-base">{totalBusiness.toFixed(0)}</td>
+                  <td className="px-4 py-3 text-center hidden sm:table-cell text-amber-400">
+                    {totalAll > 0 ? Math.round((totalActive / totalAll) * 100) : 0}%
+                  </td>
+                  <td className="px-4 py-3" />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         </div>
       )}
 
       <p className={`text-xs text-center ${isDarkMode ? "text-gray-600" : "text-gray-400"}`}>
-        Active = at least 1 approved investment · Inactive = no approved investment
+        Active = at least 1 approved investment
       </p>
     </div>
   );
@@ -1091,13 +1079,13 @@ export default function DashboardPage() {
   const pendingPayments  = payments.filter(p => p.status === "pending");
 
   const tabs = [
-    { id: "dashboard",   label: "Dashboard",   icon: BarChart3   },
-    { id: "investments", label: "Investments",  icon: TrendingUp  },
-    { id: "network",     label: "Network",      icon: Network     },
-    { id: "statistics",  label: "Statistics",   icon: Activity    },
-    { id: "profile",     label: "Profile",      icon: User        },
-    { id: "share",       label: "Share",        icon: Share2      },
-    { id: "settings",    label: "Settings",     icon: Settings    },
+    { id: "dashboard",   label: "Dashboard",  icon: BarChart3   },
+    { id: "investments", label: "Investments", icon: TrendingUp  },
+    { id: "network",     label: "Network",     icon: Network     },
+    { id: "membership",  label: "Membership",  icon: Users       },
+    { id: "profile",     label: "Profile",     icon: User        },
+    { id: "share",       label: "Share",       icon: Share2      },
+    { id: "settings",    label: "Settings",    icon: Settings    },
     ...(isAdmin ? [{ id: "admin", label: "Admin", icon: ShieldCheck }] : []),
   ];
 
@@ -1132,9 +1120,9 @@ export default function DashboardPage() {
     <div className={bg}>
       {/* Mobile Header */}
       <div className={`md:hidden sticky top-0 z-50 ${isDarkMode ? "bg-[#080c14]/95 backdrop-blur-xl border-b border-white/5" : "bg-white/95 backdrop-blur-xl border-b border-gray-200"}`}>
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center text-black font-black text-sm">
+        <div className="flex items-center justify-between px-4 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center text-black font-black text-xs">
               {getInitials(user.name)}
             </div>
             <div>
@@ -1156,53 +1144,53 @@ export default function DashboardPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
                 activeTab === tab.id
                   ? tab.id === "admin" ? "bg-red-500 text-white" : "bg-amber-500 text-black"
                   : isDarkMode ? "bg-white/5 text-gray-400" : "bg-gray-100 text-gray-600"
               }`}
             >
-              <tab.icon className="w-3.5 h-3.5" />
+              <tab.icon className="w-3 h-3" />
               {tab.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Mobile Menu */}
+      {/* Mobile slide-out menu */}
       {isMobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsMobileMenuOpen(false)} />
-          <div className={`absolute right-0 top-0 h-full w-72 ${isDarkMode ? "bg-[#111827]" : "bg-white"} shadow-2xl`}>
-            <div className={`p-5 border-b ${isDarkMode ? "border-white/10" : "border-gray-100"}`}>
+          <div className={`absolute right-0 top-0 h-full w-64 ${isDarkMode ? "bg-[#111827]" : "bg-white"} shadow-2xl`}>
+            <div className={`p-4 border-b ${isDarkMode ? "border-white/10" : "border-gray-100"}`}>
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center text-black font-black">
+                <div className="w-11 h-11 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center text-black font-black text-sm">
                   {getInitials(user.name)}
                 </div>
                 <div>
-                  <p className="font-bold">{user.name}</p>
-                  {user.userCode && <p className="text-sm text-amber-400 font-mono">{user.userCode}</p>}
+                  <p className="font-bold text-sm">{user.name}</p>
+                  {user.userCode && <p className="text-xs text-amber-400 font-mono">{user.userCode}</p>}
                 </div>
               </div>
             </div>
-            <div className="p-4 space-y-1">
+            <div className="p-3 space-y-1">
               {tabs.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => { setActiveTab(tab.id); setIsMobileMenuOpen(false); }}
-                  className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all ${
+                  className={`flex items-center gap-3 w-full p-3 rounded-xl transition-all text-sm ${
                     activeTab === tab.id
                       ? tab.id === "admin" ? "bg-red-500 text-white font-bold" : "bg-amber-500 text-black font-bold"
                       : isDarkMode ? "text-gray-300 hover:bg-white/5" : "text-gray-700 hover:bg-gray-50"
                   }`}
                 >
-                  <tab.icon className="w-5 h-5" />
+                  <tab.icon className="w-4 h-4" />
                   {tab.label}
                 </button>
               ))}
-              <div className="pt-3 mt-3 border-t border-white/10">
-                <button onClick={handleLogout} className="flex items-center gap-3 w-full p-3 rounded-xl text-red-400 hover:bg-red-400/10">
-                  <LogOut className="w-5 h-5" /> Logout
+              <div className={`pt-2 mt-2 border-t ${isDarkMode ? "border-white/10" : "border-gray-100"}`}>
+                <button onClick={handleLogout} className="flex items-center gap-3 w-full p-3 rounded-xl text-red-400 hover:bg-red-400/10 text-sm">
+                  <LogOut className="w-4 h-4" /> Logout
                 </button>
               </div>
             </div>
@@ -1243,7 +1231,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Mobile Content */}
-      <div className="md:hidden p-4">{renderContent()}</div>
+      <div className="md:hidden p-4 pb-6">{renderContent()}</div>
     </div>
   );
 
@@ -1252,7 +1240,7 @@ export default function DashboardPage() {
       case "dashboard":   return renderDashboard();
       case "investments": return renderInvestments();
       case "network":     return <NetworkPanel userId={user!._id} isDarkMode={isDarkMode} card={card} />;
-      case "statistics":  return <StatisticsPanel userId={user!._id} isDarkMode={isDarkMode} card={card} />;
+      case "membership":  return <Membership userId={user!._id} isDarkMode={isDarkMode} card={card} />;
       case "profile":     return renderProfile();
       case "share":       return renderShare();
       case "settings":    return renderSettings();
@@ -1266,42 +1254,42 @@ export default function DashboardPage() {
     const totalInvested       = approvedPayments.reduce((sum, p) => sum + p.amount, 0);
 
     return (
-      <div className="space-y-6 max-w-4xl mx-auto">
+      <div className="space-y-5 max-w-4xl mx-auto">
         <div className="flex items-start justify-between">
           <div>
-            <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Welcome back 👋</p>
-            <h1 className="text-2xl md:text-3xl font-black mt-0.5">{user!.name}</h1>
+            <p className={`text-xs md:text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Welcome back 👋</p>
+            <h1 className="text-xl md:text-3xl font-black mt-0.5">{user!.name}</h1>
           </div>
           <div className="flex items-center gap-2">
             {isAdmin && (
-              <button onClick={() => setActiveTab("admin")} className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-400 px-3 py-2 rounded-xl text-xs font-bold hover:bg-red-500/20 transition-all">
-                <ShieldCheck className="w-4 h-4" /> Admin
+              <button onClick={() => setActiveTab("admin")} className="flex items-center gap-1.5 bg-red-500/10 border border-red-500/30 text-red-400 px-2.5 py-2 rounded-xl text-xs font-bold hover:bg-red-500/20 transition-all">
+                <ShieldCheck className="w-3.5 h-3.5" /> Admin
               </button>
             )}
             {user!.userCode && (
-              <div className={`text-right ${card} px-4 py-2`}>
-                <p className="text-xs text-gray-500 mb-0.5">User Code</p>
-                <p className="font-mono font-bold text-amber-400">{user!.userCode}</p>
+              <div className={`text-right ${card} px-3 py-2`}>
+                <p className="text-xs text-gray-500 mb-0.5">Code</p>
+                <p className="font-mono font-bold text-amber-400 text-sm">{user!.userCode}</p>
               </div>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
           {[
             { label: "Total Invested",  value: `${totalInvested.toFixed(2)} USDT`,              icon: Wallet,     color: "from-blue-500 to-blue-600",       sub: `${approvedPayments.length} active`  },
             { label: "Interest Earned", value: `${totalInterestEarned.toFixed(4)} USDT`,         icon: TrendingUp, color: "from-emerald-500 to-emerald-600", sub: "Total so far"                       },
             { label: "Daily Return",    value: `${approvedPayments.reduce((s, p) => s + (p.investmentCalc?.dailyInterest || 0), 0).toFixed(4)} USDT`, icon: Activity, color: "from-amber-500 to-orange-500", sub: "Per day" },
             { label: "Pending",         value: `${pendingPayments.length}`,                      icon: Clock,      color: "from-purple-500 to-purple-600",   sub: "Awaiting approval"                  },
           ].map((stat, i) => (
-            <div key={i} className={`${card} p-4 relative overflow-hidden`}>
-              <div className={`absolute top-0 right-0 w-16 h-16 bg-gradient-to-br ${stat.color} opacity-10 rounded-full -mr-4 -mt-4`} />
-              <div className={`w-8 h-8 bg-gradient-to-br ${stat.color} rounded-lg flex items-center justify-center mb-3`}>
-                <stat.icon className="w-4 h-4 text-white" />
+            <div key={i} className={`${card} p-3 md:p-4 relative overflow-hidden`}>
+              <div className={`absolute top-0 right-0 w-14 h-14 bg-gradient-to-br ${stat.color} opacity-10 rounded-full -mr-3 -mt-3`} />
+              <div className={`w-7 h-7 md:w-8 md:h-8 bg-gradient-to-br ${stat.color} rounded-lg flex items-center justify-center mb-2`}>
+                <stat.icon className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
               </div>
-              <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-1`}>{stat.label}</p>
-              <p className="font-bold text-base md:text-lg">{stat.value}</p>
-              <p className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>{stat.sub}</p>
+              <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-0.5`}>{stat.label}</p>
+              <p className="font-bold text-sm md:text-base">{stat.value}</p>
+              <p className={`text-xs mt-0.5 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>{stat.sub}</p>
             </div>
           ))}
         </div>
@@ -1309,7 +1297,7 @@ export default function DashboardPage() {
         {approvedPayments.length > 0 && (
           <div className={card}>
             <div className="p-4 md:p-5">
-              <h2 className="font-bold text-base mb-4 flex items-center gap-2">
+              <h2 className="font-bold text-sm md:text-base mb-3 flex items-center gap-2">
                 <Zap className="w-4 h-4 text-amber-400" /> Active Investments
               </h2>
               <div className="space-y-3">
@@ -1318,26 +1306,24 @@ export default function DashboardPage() {
                   const maxMo    = payment.maxMonths || DEFAULT_MAX_MONTHS;
                   const progress = calc ? Math.min((calc.daysElapsed / (maxMo * 30)) * 100, 100) : 0;
                   return (
-                    <div key={payment._id} className={`p-4 rounded-xl ${isDarkMode ? "bg-white/5" : "bg-gray-50"}`}>
-                      <div className="flex justify-between items-start mb-3">
+                    <div key={payment._id} className={`p-3 md:p-4 rounded-xl ${isDarkMode ? "bg-white/5" : "bg-gray-50"}`}>
+                      <div className="flex justify-between items-start mb-2">
                         <div>
-                          <p className="font-bold text-base">{payment.amount} USDT</p>
-                          <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                            Invested {new Date(payment.createdAt).toLocaleDateString()}
-                          </p>
+                          <p className="font-bold text-sm md:text-base">{payment.amount} USDT</p>
+                          <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{new Date(payment.createdAt).toLocaleDateString()}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-emerald-400 font-bold">{calc?.totalInterest.toFixed(4)} USDT</p>
-                          <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>earned so far</p>
+                          <p className="text-emerald-400 font-bold text-sm">{calc?.totalInterest.toFixed(4)} USDT</p>
+                          <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>earned</p>
                         </div>
                       </div>
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-gray-500">
                           <span>{calc?.daysElapsed || 0} days</span>
-                          <span>{maxMo} months max</span>
+                          <span>{maxMo}mo max</span>
                         </div>
                         <div className={`h-1.5 rounded-full ${isDarkMode ? "bg-white/10" : "bg-gray-200"}`}>
-                          <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all" style={{ width: `${progress}%` }} />
+                          <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" style={{ width: `${progress}%` }} />
                         </div>
                       </div>
                     </div>
@@ -1345,7 +1331,7 @@ export default function DashboardPage() {
                 })}
               </div>
               {approvedPayments.length > 3 && (
-                <button onClick={() => setActiveTab("investments")} className="w-full mt-3 text-amber-400 text-sm font-semibold hover:underline">
+                <button onClick={() => setActiveTab("investments")} className="w-full mt-3 text-amber-400 text-xs md:text-sm font-semibold hover:underline">
                   View all {approvedPayments.length} investments →
                 </button>
               )}
@@ -1355,28 +1341,26 @@ export default function DashboardPage() {
 
         {pendingPayments.length > 0 && (
           <div className={`${card} border-l-4 border-amber-400`}>
-            <div className="p-4">
-              <div className="flex items-center gap-2 mb-3">
+            <div className="p-3 md:p-4">
+              <div className="flex items-center gap-2 mb-1">
                 <Clock className="w-4 h-4 text-amber-400" />
                 <h2 className="font-bold text-sm">{pendingPayments.length} Pending Approval{pendingPayments.length > 1 ? "s" : ""}</h2>
               </div>
-              <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                Your investment{pendingPayments.length > 1 ? "s are" : " is"} awaiting Super Admin approval.
-              </p>
+              <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Awaiting Super Admin approval.</p>
             </div>
           </div>
         )}
 
         {approvedPayments.length === 0 && pendingPayments.length === 0 && (
           <div className={`${card} p-8 text-center`}>
-            <div className="w-16 h-16 bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <TrendingUp className="w-8 h-8 text-amber-400" />
+            <div className="w-14 h-14 bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <TrendingUp className="w-7 h-7 text-amber-400" />
             </div>
-            <h3 className="font-bold text-lg mb-2">Start Investing</h3>
-            <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-4`}>
+            <h3 className="font-bold text-base md:text-lg mb-2">Start Investing</h3>
+            <p className={`text-xs md:text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"} mb-4`}>
               Invest 50–5,000 USDT and earn 8% monthly interest for up to {DEFAULT_MAX_MONTHS} months
             </p>
-            <button onClick={() => setActiveTab("investments")} className="bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold px-6 py-3 rounded-xl hover:opacity-90 transition-all">
+            <button onClick={() => setActiveTab("investments")} className="bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold px-6 py-3 rounded-xl hover:opacity-90 transition-all text-sm">
               Make First Investment
             </button>
           </div>
@@ -1391,25 +1375,23 @@ export default function DashboardPage() {
     const monthlyInterest = amountVal * MONTHLY_RATE;
 
     return (
-      <div className="space-y-5 max-w-4xl mx-auto">
+      <div className="space-y-4 max-w-4xl mx-auto">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-black">Investments</h1>
-            <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-              8% monthly · Up to 5,000 USDT · {DEFAULT_MAX_MONTHS} months
-            </p>
+            <h1 className="text-xl md:text-2xl font-black">Investments</h1>
+            <p className={`text-xs md:text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>8% monthly · Up to 5,000 USDT</p>
           </div>
-          <button onClick={() => setShowAddPayment(!showAddPayment)} className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold px-4 py-2.5 rounded-xl text-sm">
-            <Plus className="w-4 h-4" /> Invest
+          <button onClick={() => setShowAddPayment(!showAddPayment)} className="flex items-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold px-3 md:px-4 py-2.5 rounded-xl text-xs md:text-sm">
+            <Plus className="w-3.5 h-3.5 md:w-4 md:h-4" /> Invest
           </button>
         </div>
 
         {showAddPayment && (
           <div className={`${card} overflow-hidden`}>
             <div className="h-1 bg-gradient-to-r from-amber-400 to-orange-500" />
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="font-bold text-base">New Investment</h3>
+            <div className="p-4 md:p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-sm md:text-base">New Investment</h3>
                 <button onClick={() => setShowAddPayment(false)} className="p-1.5 rounded-lg hover:bg-white/5"><X className="w-4 h-4" /></button>
               </div>
               <div className="space-y-4">
@@ -1418,10 +1400,10 @@ export default function DashboardPage() {
                   <input type="number" value={paymentForm.amount} onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })} className={input} placeholder="Min: 50 — Max: 5,000 USDT" min="50" max="5000" />
                   {amountVal >= 50 && amountVal <= 5000 && (
                     <div className={`mt-2 p-3 rounded-xl ${isDarkMode ? "bg-emerald-500/10 border border-emerald-500/20" : "bg-emerald-50 border border-emerald-200"}`}>
-                      <div className="grid grid-cols-3 gap-3 text-center">
-                        <div><p className="text-xs text-gray-500 mb-0.5">Daily</p><p className="font-bold text-emerald-400 text-sm">{dailyInterest.toFixed(4)} USDT</p></div>
-                        <div><p className="text-xs text-gray-500 mb-0.5">Monthly (8%)</p><p className="font-bold text-emerald-400 text-sm">{monthlyInterest.toFixed(2)} USDT</p></div>
-                        <div><p className="text-xs text-gray-500 mb-0.5">Max Return</p><p className="font-bold text-amber-400 text-sm">{(amountVal * 2).toFixed(0)} USDT</p></div>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div><p className="text-xs text-gray-500 mb-0.5">Daily</p><p className="font-bold text-emerald-400 text-xs md:text-sm">{dailyInterest.toFixed(4)} USDT</p></div>
+                        <div><p className="text-xs text-gray-500 mb-0.5">Monthly</p><p className="font-bold text-emerald-400 text-xs md:text-sm">{monthlyInterest.toFixed(2)} USDT</p></div>
+                        <div><p className="text-xs text-gray-500 mb-0.5">Max Return</p><p className="font-bold text-amber-400 text-xs md:text-sm">{(amountVal * 2).toFixed(0)} USDT</p></div>
                       </div>
                     </div>
                   )}
@@ -1433,18 +1415,18 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <label className={`block text-xs font-semibold uppercase tracking-widest mb-2 ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>Payment Screenshot *</label>
-                  <div className={`border-2 border-dashed rounded-xl p-5 text-center transition-all ${isDarkMode ? "border-white/10 hover:border-amber-400/30" : "border-gray-200 hover:border-amber-400/50"}`}>
+                  <div className={`border-2 border-dashed rounded-xl p-4 text-center transition-all ${isDarkMode ? "border-white/10 hover:border-amber-400/30" : "border-gray-200 hover:border-amber-400/50"}`}>
                     {paymentForm.screenshot ? (
                       <div className="space-y-2">
-                        <img src={URL.createObjectURL(paymentForm.screenshot)} alt="Preview" className="mx-auto h-24 w-auto object-contain rounded-lg" />
+                        <img src={URL.createObjectURL(paymentForm.screenshot)} alt="Preview" className="mx-auto h-20 w-auto object-contain rounded-lg" />
                         <p className="text-xs text-gray-400 truncate">{paymentForm.screenshot.name}</p>
                         <button onClick={() => setPaymentForm({ ...paymentForm, screenshot: null })} className="text-xs text-red-400 hover:underline">Remove</button>
                       </div>
                     ) : (
                       <div>
-                        <CreditCard className="w-8 h-8 mx-auto mb-2 text-gray-500" />
-                        <p className="text-sm text-gray-400 mb-2">Upload payment proof</p>
-                        <label className="bg-amber-500 text-black px-4 py-2 rounded-lg cursor-pointer text-sm font-semibold hover:bg-amber-400 transition-all inline-block">
+                        <CreditCard className="w-7 h-7 mx-auto mb-2 text-gray-500" />
+                        <p className="text-xs text-gray-400 mb-2">Upload payment proof</p>
+                        <label className="bg-amber-500 text-black px-4 py-2 rounded-lg cursor-pointer text-xs font-semibold hover:bg-amber-400 transition-all inline-block">
                           Choose File
                           <input type="file" accept="image/*" onChange={(e) => setPaymentForm({ ...paymentForm, screenshot: e.target.files?.[0] || null })} className="hidden" />
                         </label>
@@ -1454,13 +1436,13 @@ export default function DashboardPage() {
                 </div>
                 <div className={`p-3 rounded-xl flex items-start gap-2 ${isDarkMode ? "bg-amber-500/10 border border-amber-500/20" : "bg-amber-50 border border-amber-200"}`}>
                   <Shield className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-amber-300">Your investment will be <strong>pending</strong> until the Super Admin approves it.</p>
+                  <p className="text-xs text-amber-300">Investment will be <strong>pending</strong> until Super Admin approves it.</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handleAddPayment} disabled={!paymentForm.amount || !paymentForm.screenshot || amountVal < 50 || amountVal > 5000} className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold py-3 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed">
+                  <button onClick={handleAddPayment} disabled={!paymentForm.amount || !paymentForm.screenshot || amountVal < 50 || amountVal > 5000} className="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold py-3 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed text-sm">
                     Submit Investment
                   </button>
-                  <button onClick={() => setShowAddPayment(false)} className={`px-4 py-3 rounded-xl border ${isDarkMode ? "border-white/10" : "border-gray-200"} text-sm`}>Cancel</button>
+                  <button onClick={() => setShowAddPayment(false)} className={`px-4 py-3 rounded-xl border text-sm ${isDarkMode ? "border-white/10" : "border-gray-200"}`}>Cancel</button>
                 </div>
               </div>
             </div>
@@ -1471,8 +1453,8 @@ export default function DashboardPage() {
           <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-t-transparent border-amber-400 rounded-full animate-spin" /></div>
         ) : payments.length === 0 ? (
           <div className={`${card} p-8 text-center`}>
-            <TrendingUp className="w-12 h-12 mx-auto mb-3 text-gray-500" />
-            <p className={isDarkMode ? "text-gray-400" : "text-gray-500"}>No investments yet. Start with as little as 50 USDT!</p>
+            <TrendingUp className="w-10 h-10 mx-auto mb-3 text-gray-500" />
+            <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>No investments yet. Start with as little as 50 USDT!</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -1484,41 +1466,41 @@ export default function DashboardPage() {
               return (
                 <div key={payment._id} className={card}>
                   <div className="p-4 md:p-5">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDarkMode ? "bg-amber-500/10" : "bg-amber-50"}`}>
-                          <DollarSign className="w-5 h-5 text-amber-400" />
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${isDarkMode ? "bg-amber-500/10" : "bg-amber-50"}`}>
+                          <DollarSign className="w-4 h-4 text-amber-400" />
                         </div>
                         <div>
-                          <p className="font-bold text-lg">{payment.amount} <span className="text-sm font-normal text-gray-400">USDT</span></p>
+                          <p className="font-bold text-base md:text-lg">{payment.amount} <span className="text-xs md:text-sm font-normal text-gray-400">USDT</span></p>
                           <p className={`text-xs ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>
                             {new Date(payment.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold ${statusCfg.bg}`}>
-                          <StatusIcon className={`w-3.5 h-3.5 ${statusCfg.color}`} />
+                      <div className="flex items-center gap-1.5">
+                        <div className={`flex items-center gap-1 px-2 py-1 rounded-full border text-xs font-semibold ${statusCfg.bg}`}>
+                          <StatusIcon className={`w-3 h-3 ${statusCfg.color}`} />
                           <span className={statusCfg.color}>{statusCfg.label}</span>
                         </div>
-                        <button onClick={() => window.open(payment.screenshot, "_blank")} className="p-2 rounded-lg hover:bg-white/5"><Eye className="w-4 h-4 text-gray-400" /></button>
-                        <button onClick={() => handleDeletePayment(payment._id)} className="p-2 rounded-lg hover:bg-red-500/10 text-red-400"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => window.open(payment.screenshot, "_blank")} className="p-1.5 rounded-lg hover:bg-white/5"><Eye className="w-3.5 h-3.5 text-gray-400" /></button>
+                        <button onClick={() => handleDeletePayment(payment._id)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
                     {payment.status === "approved" && calc && (
-                      <div className={`rounded-xl p-4 ${isDarkMode ? "bg-white/3" : "bg-gray-50"}`}>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                          <div><p className={`text-xs mb-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Days Active</p><p className="font-bold text-sm">{calc.daysElapsed} days</p></div>
-                          <div><p className={`text-xs mb-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Daily Interest</p><p className="font-bold text-sm text-emerald-400">{calc.dailyInterest} USDT</p></div>
-                          <div><p className={`text-xs mb-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Earned So Far</p><p className="font-bold text-sm text-emerald-400">{calc.totalInterest.toFixed(4)} USDT</p></div>
-                          <div><p className={`text-xs mb-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Max Return</p><p className="font-bold text-sm text-amber-400">{calc.maxInterest.toFixed(2)} USDT</p></div>
+                      <div className={`rounded-xl p-3 ${isDarkMode ? "bg-white/3" : "bg-gray-50"}`}>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                          <div><p className={`text-xs mb-0.5 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Days Active</p><p className="font-bold text-xs md:text-sm">{calc.daysElapsed} days</p></div>
+                          <div><p className={`text-xs mb-0.5 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Daily</p><p className="font-bold text-xs md:text-sm text-emerald-400">{calc.dailyInterest} USDT</p></div>
+                          <div><p className={`text-xs mb-0.5 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Earned</p><p className="font-bold text-xs md:text-sm text-emerald-400">{calc.totalInterest.toFixed(4)} USDT</p></div>
+                          <div><p className={`text-xs mb-0.5 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Max Return</p><p className="font-bold text-xs md:text-sm text-amber-400">{calc.maxInterest.toFixed(2)} USDT</p></div>
                         </div>
                         <div>
                           <div className="flex justify-between text-xs text-gray-500 mb-1">
-                            <span>{calc.daysElapsed} / {maxMo * 30} days</span>
+                            <span>{calc.daysElapsed}/{maxMo * 30}d</span>
                             <span>{((calc.daysElapsed / (maxMo * 30)) * 100).toFixed(1)}%</span>
                           </div>
-                          <div className={`h-2 rounded-full ${isDarkMode ? "bg-white/10" : "bg-gray-200"}`}>
+                          <div className={`h-1.5 rounded-full ${isDarkMode ? "bg-white/10" : "bg-gray-200"}`}>
                             <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" style={{ width: `${Math.min((calc.daysElapsed / (maxMo * 30)) * 100, 100)}%` }} />
                           </div>
                           <p className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>
@@ -1530,8 +1512,8 @@ export default function DashboardPage() {
                     )}
                     {payment.status === "pending" && (
                       <div className={`rounded-xl p-3 flex items-center gap-2 ${isDarkMode ? "bg-amber-500/10 border border-amber-500/20" : "bg-amber-50 border border-amber-200"}`}>
-                        <Clock className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                        <p className="text-xs text-amber-300">Awaiting approval. Daily interest of <strong>{getDailyInterest(payment.amount).toFixed(4)} USDT</strong> will start once approved.</p>
+                        <Clock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                        <p className="text-xs text-amber-300">Awaiting approval. Daily interest of <strong>{getDailyInterest(payment.amount).toFixed(4)} USDT</strong> starts once approved.</p>
                       </div>
                     )}
                     {payment.description && <p className={`text-xs mt-2 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>{payment.description}</p>}
@@ -1547,51 +1529,51 @@ export default function DashboardPage() {
 
   function renderProfile() {
     return (
-      <div className="space-y-5 max-w-2xl mx-auto">
+      <div className="space-y-4 max-w-2xl mx-auto">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-black">Profile</h1>
+          <h1 className="text-xl md:text-2xl font-black">Profile</h1>
           {!isEditing ? (
-            <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 bg-amber-500 text-black font-bold px-4 py-2.5 rounded-xl text-sm"><Edit2 className="w-4 h-4" /> Edit</button>
+            <button onClick={() => setIsEditing(true)} className="flex items-center gap-1.5 bg-amber-500 text-black font-bold px-3 py-2 rounded-xl text-xs md:text-sm"><Edit2 className="w-3.5 h-3.5" /> Edit</button>
           ) : (
             <div className="flex gap-2">
-              <button onClick={handleSaveProfile} className="flex items-center gap-2 bg-emerald-500 text-black font-bold px-4 py-2.5 rounded-xl text-sm"><Save className="w-4 h-4" /> Save</button>
-              <button onClick={() => setIsEditing(false)} className={`px-4 py-2.5 rounded-xl text-sm border ${isDarkMode ? "border-white/10" : "border-gray-200"}`}>Cancel</button>
+              <button onClick={handleSaveProfile} className="flex items-center gap-1.5 bg-emerald-500 text-black font-bold px-3 py-2 rounded-xl text-xs md:text-sm"><Save className="w-3.5 h-3.5" /> Save</button>
+              <button onClick={() => setIsEditing(false)} className={`px-3 py-2 rounded-xl text-xs md:text-sm border ${isDarkMode ? "border-white/10" : "border-gray-200"}`}>Cancel</button>
             </div>
           )}
         </div>
 
         {user!.userCode && (
-          <div className={`${card} p-5`}>
+          <div className={`${card} p-4`}>
             <div className="flex items-center justify-between">
               <div>
                 <p className={`text-xs font-semibold uppercase tracking-widest mb-1 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Your User Code</p>
-                <p className="text-3xl font-black text-amber-400 font-mono">{user!.userCode}</p>
+                <p className="text-2xl md:text-3xl font-black text-amber-400 font-mono">{user!.userCode}</p>
                 <p className={`text-xs mt-1 ${isDarkMode ? "text-gray-500" : "text-gray-400"}`}>Login ID · Referral ID</p>
               </div>
-              <button onClick={handleCopyCode} className={`p-3 rounded-xl transition-all ${isDarkMode ? "bg-white/5 hover:bg-white/10" : "bg-gray-50 hover:bg-gray-100"}`}>
+              <button onClick={handleCopyCode} className={`p-2.5 rounded-xl transition-all ${isDarkMode ? "bg-white/5 hover:bg-white/10" : "bg-gray-50 hover:bg-gray-100"}`}>
                 {copied ? <CheckCircle className="w-5 h-5 text-emerald-400" /> : <Copy className="w-5 h-5 text-amber-400" />}
               </button>
             </div>
           </div>
         )}
 
-        <div className={`${card} p-5`}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className={`${card} p-4`}>
+          <div className="space-y-3 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
             {[
-              { key: "name",   label: "Full Name",     icon: User,       placeholder: "Your full name",  editable: true  },
-              { key: "mobile", label: "Mobile Number", icon: Phone,      placeholder: "10-digit mobile", editable: false },
-              { key: "email",  label: "Email Address", icon: Mail,       placeholder: "your@email.com",  editable: true  },
-              { key: "pan",    label: "PAN Number",    icon: CreditCard, placeholder: "ABCDE1234F",      editable: false },
-            ].map(({ key, label, icon: Icon, placeholder, editable }) => (
+              { key: "name",   label: "Full Name",     icon: User,       editable: true  },
+              { key: "mobile", label: "Mobile Number", icon: Phone,      editable: false },
+              { key: "email",  label: "Email Address", icon: Mail,       editable: true  },
+              { key: "pan",    label: "PAN Number",    icon: CreditCard, editable: false },
+            ].map(({ key, label, icon: Icon, editable }) => (
               <div key={key}>
-                <label className={`block text-xs font-semibold uppercase tracking-widest mb-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{label}</label>
+                <label className={`block text-xs font-semibold uppercase tracking-widest mb-1.5 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{label}</label>
                 {isEditing && editable ? (
-                  <input type="text" value={formData[key as keyof FormData]} onChange={(e) => setFormData({ ...formData, [key]: e.target.value })} className={input} placeholder={placeholder} />
+                  <input type="text" value={formData[key as keyof FormData]} onChange={(e) => setFormData({ ...formData, [key]: e.target.value })} className={input} />
                 ) : (
-                  <div className={`flex items-center gap-2 px-4 py-3 rounded-xl ${isDarkMode ? "bg-white/5" : "bg-gray-50"}`}>
+                  <div className={`flex items-center gap-2 px-3 py-2.5 rounded-xl ${isDarkMode ? "bg-white/5" : "bg-gray-50"}`}>
                     <Icon className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    <span className={`text-sm ${!formData[key as keyof FormData] ? "text-gray-500 italic" : ""}`}>{formData[key as keyof FormData] || "Not provided"}</span>
-                    {!editable && <span className="ml-auto text-xs text-gray-500 bg-gray-500/10 px-2 py-0.5 rounded">Fixed</span>}
+                    <span className={`text-sm flex-1 truncate ${!formData[key as keyof FormData] ? "text-gray-500 italic" : ""}`}>{formData[key as keyof FormData] || "Not provided"}</span>
+                    {!editable && <span className="text-xs text-gray-500 bg-gray-500/10 px-1.5 py-0.5 rounded flex-shrink-0">Fixed</span>}
                   </div>
                 )}
               </div>
@@ -1605,63 +1587,64 @@ export default function DashboardPage() {
   function renderShare() {
     const shareLink = user!.userCode ? `${window.location.origin}/join/${user!.userCode}` : "";
     return (
-      <div className="space-y-5 max-w-2xl mx-auto">
+      <div className="space-y-4 max-w-2xl mx-auto">
         <div>
-          <h1 className="text-2xl font-black">Share & Earn</h1>
-          <p className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
+          <h1 className="text-xl md:text-2xl font-black">Share & Earn</h1>
+          <p className={`text-xs md:text-sm ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
             Invite friends to extend your investment to {REFERRAL_MAX_MONTHS} months
           </p>
         </div>
-        <div className={`${card} p-5`}>
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center">
-              <Star className="w-6 h-6 text-black" />
+        <div className={`${card} p-4`}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-11 h-11 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center flex-shrink-0">
+              <Star className="w-5 h-5 text-black" />
             </div>
             <div>
-              <p className="font-bold">Referral Bonus</p>
+              <p className="font-bold text-sm">Referral Bonus</p>
               <p className={`text-xs ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>
-                Invite someone → your investment period extends to <strong className="text-amber-400">{REFERRAL_MAX_MONTHS} months</strong>
+                Invite → your plan extends to <strong className="text-amber-400">{REFERRAL_MAX_MONTHS} months</strong>
               </p>
             </div>
           </div>
           {user!.userCode && (
             <>
               <label className={`block text-xs font-semibold uppercase tracking-widest mb-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Your Referral Link</label>
-              <div className={`flex items-center gap-2 p-3 rounded-xl ${isDarkMode ? "bg-white/5 border border-white/10" : "bg-gray-50 border border-gray-200"} mb-3`}>
+              <div className={`flex items-center gap-2 p-3 rounded-xl mb-3 ${isDarkMode ? "bg-white/5 border border-white/10" : "bg-gray-50 border border-gray-200"}`}>
                 <p className={`flex-1 text-xs truncate font-mono ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>{shareLink}</p>
                 <button onClick={handleCopyShareLink} className="bg-amber-500 text-black px-3 py-1.5 rounded-lg text-xs font-bold flex-shrink-0">
                   {copied ? "Copied!" : "Copy"}
                 </button>
               </div>
-              <div className={`p-4 rounded-xl ${isDarkMode ? "bg-amber-500/10 border border-amber-500/20" : "bg-amber-50 border border-amber-200"}`}>
-                <p className={`text-xs font-bold mb-1 ${isDarkMode ? "text-amber-300" : "text-amber-700"}`}>Your User Code: {user!.userCode}</p>
+              <div className={`p-3 rounded-xl ${isDarkMode ? "bg-amber-500/10 border border-amber-500/20" : "bg-amber-50 border border-amber-200"}`}>
+                <p className={`text-xs font-bold mb-0.5 ${isDarkMode ? "text-amber-300" : "text-amber-700"}`}>Code: {user!.userCode}</p>
                 <p className={`text-xs ${isDarkMode ? "text-amber-400/70" : "text-amber-600"}`}>
-                  Share this code or the link above to extend your plan from {DEFAULT_MAX_MONTHS} to {REFERRAL_MAX_MONTHS} months!
+                  Share this code to extend plan from {DEFAULT_MAX_MONTHS} to {REFERRAL_MAX_MONTHS} months!
                 </p>
               </div>
             </>
           )}
         </div>
+
         {user!.children && user!.children.length > 0 && (
-          <div className={card}>
-            <div className="p-5">
-              <h3 className="font-bold mb-4 flex items-center gap-2">
+          <div className={`${card} overflow-hidden`}>
+            <div className={`px-4 py-3 border-b ${isDarkMode ? "border-white/5" : "border-gray-100"}`}>
+              <p className="font-bold text-sm flex items-center gap-2">
                 <Users className="w-4 h-4 text-amber-400" />
                 {user!.children.length} Referred Member{user!.children.length > 1 ? "s" : ""}
-              </h3>
-              <div className="space-y-2">
-                {user!.children.slice(0, 5).map((child: any, i: number) => (
-                  <div key={i} className={`flex items-center gap-3 p-3 rounded-xl ${isDarkMode ? "bg-white/5" : "bg-gray-50"}`}>
-                    <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center text-white text-xs font-bold">
-                      {child.name ? child.name.charAt(0).toUpperCase() : "?"}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm">{child.name || "Member"}</p>
-                      {child.userCode && <p className="text-xs text-amber-400 font-mono">{child.userCode}</p>}
-                    </div>
+              </p>
+            </div>
+            <div className="divide-y divide-white/5">
+              {user!.children.slice(0, 5).map((child: any, i: number) => (
+                <div key={i} className={`flex items-center gap-3 px-4 py-3 ${isDarkMode ? "hover:bg-white/3" : "hover:bg-gray-50"}`}>
+                  <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                    {child.name ? child.name.charAt(0).toUpperCase() : "?"}
                   </div>
-                ))}
-              </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm truncate">{child.name || "Member"}</p>
+                    {child.userCode && <p className="text-xs text-amber-400 font-mono">{child.userCode}</p>}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -1671,58 +1654,49 @@ export default function DashboardPage() {
 
   function renderSettings() {
     return (
-      <div className="space-y-5 max-w-2xl mx-auto">
-        <h1 className="text-2xl font-black">Settings</h1>
+      <div className="space-y-4 max-w-2xl mx-auto">
+        <h1 className="text-xl md:text-2xl font-black">Settings</h1>
         <div className={card}>
-          <div className="p-5">
-            <h3 className="font-bold mb-1">Update Password</h3>
-            <p className={`text-xs mb-5 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Change your account password</p>
+          <div className="p-4">
+            <h3 className="font-bold text-sm mb-0.5">Update Password</h3>
+            <p className={`text-xs mb-4 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Change your account password</p>
             {passwordMessage.text && (
-              <div className={`mb-4 p-3 rounded-xl text-sm ${passwordMessage.type === "success" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
+              <div className={`mb-3 p-3 rounded-xl text-xs md:text-sm ${passwordMessage.type === "success" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
                 {passwordMessage.text}
               </div>
             )}
             <div className="space-y-3">
               {[
-                { label: "Current Password", key: "currentPassword" },
-                { label: "New Password",      key: "newPassword"     },
-                { label: "Confirm Password",  key: "confirmPassword" },
-              ].map(({ label, key }) => (
+                { label: "Current Password", key: "currentPassword", show: "current" },
+                { label: "New Password",      key: "newPassword",     show: "new"     },
+                { label: "Confirm Password",  key: "confirmPassword", show: "confirm" },
+              ].map(({ label, key, show }) => (
                 <div key={key}>
-                  <label className={`block text-xs font-semibold uppercase tracking-widest mb-2 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{label}</label>
+                  <label className={`block text-xs font-semibold uppercase tracking-widest mb-1.5 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>{label}</label>
                   <div className="relative">
                     <input
-                      type={showPassword[key.replace("Password", "") as keyof typeof showPassword] ? "text" : "password"}
+                      type={showPassword[show as keyof typeof showPassword] ? "text" : "password"}
                       value={passwordForm[key as keyof PasswordFormData]}
                       onChange={(e) => setPasswordForm({ ...passwordForm, [key]: e.target.value })}
                       className={`${input} pr-12`}
                       placeholder={`Enter ${label.toLowerCase()}`}
                     />
-                    <button
-                      onClick={() => {
-                        const k = key.replace("Password", "") as keyof typeof showPassword;
-                        setShowPassword({ ...showPassword, [k]: !showPassword[k] });
-                      }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2"
-                    >
-                      {showPassword[key.replace("Password", "") as keyof typeof showPassword]
-                        ? <EyeOff className="w-4 h-4 text-gray-400" />
-                        : <Eye className="w-4 h-4 text-gray-400" />
-                      }
+                    <button onClick={() => setShowPassword({ ...showPassword, [show]: !showPassword[show as keyof typeof showPassword] })} className="absolute right-3 top-1/2 -translate-y-1/2">
+                      {showPassword[show as keyof typeof showPassword] ? <EyeOff className="w-4 h-4 text-gray-400" /> : <Eye className="w-4 h-4 text-gray-400" />}
                     </button>
                   </div>
                 </div>
               ))}
-              <button onClick={handleUpdatePassword} className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold py-3 rounded-xl">
+              <button onClick={handleUpdatePassword} className="w-full bg-gradient-to-r from-amber-500 to-orange-500 text-black font-bold py-3 rounded-xl text-sm">
                 Update Password
               </button>
             </div>
           </div>
         </div>
-        <div className={`${card} p-5`}>
-          <h3 className="font-bold mb-1">Session</h3>
-          <p className={`text-xs mb-4 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Sign out of your account</p>
-          <button onClick={handleLogout} className="flex items-center gap-2 bg-red-500/10 text-red-400 border border-red-500/20 font-bold px-4 py-3 rounded w-full justify-center">
+        <div className={`${card} p-4`}>
+          <h3 className="font-bold text-sm mb-0.5">Session</h3>
+          <p className={`text-xs mb-3 ${isDarkMode ? "text-gray-400" : "text-gray-500"}`}>Sign out of your account</p>
+          <button onClick={handleLogout} className="flex items-center gap-2 bg-red-500/10 text-red-400 border border-red-500/20 font-bold px-4 py-2.5 rounded-xl w-full justify-center text-sm">
             <LogOut className="w-4 h-4" /> Logout
           </button>
         </div>
