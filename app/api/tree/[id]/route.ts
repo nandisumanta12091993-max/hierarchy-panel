@@ -1,4 +1,4 @@
-//tree/[id]/route.ts
+// app/api/tree/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/config/db";
 import User from "@/lib/models/User";
@@ -6,7 +6,10 @@ import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
 
-// Helper to verify token
+const MONTHLY_RATE = 0.08;
+const DAYS_PER_MONTH = 30;
+const DEFAULT_MAX_MONTHS = 24;
+
 async function verifyToken(token: string): Promise<any> {
   try {
     return jwt.verify(token, JWT_SECRET);
@@ -15,91 +18,99 @@ async function verifyToken(token: string): Promise<any> {
   }
 }
 
-// Interface for tree node
+interface PaymentSummary {
+  totalInvested: number;
+  approvedCount: number;
+  pendingCount: number;
+  totalInterestEarned: number;
+}
+
 interface UserNode {
   _id: string;
   name: string;
   mobile: string;
   email: string;
-  policeStation: string;
-  walletName: string;
-  walletAddress: string;
-  paymentScreenshot?: string;
+  userCode?: string;
   referralToken: string;
   parentId: string | null;
   children: UserNode[];
   level: number;
-  paymentSummary: {
-    totalAmount: number;
-    paymentCount: number;
-    lastPayment?: {
-      amount: number;
-      date: string;
-      screenshot: string;
-    };
-  };
+  paymentSummary: PaymentSummary;
 }
 
-// Recursive function to build tree
-async function getUserTree(
-  userId: string, 
+function calcInterestEarned(payments: any[]): number {
+  const approved = payments.filter((p: any) => p.status === "approved");
+  return approved.reduce((sum: number, p: any) => {
+    const approvedAt = new Date(p.updatedAt || p.createdAt).getTime();
+    const now = Date.now();
+    const daysElapsed = Math.max(
+      0,
+      Math.floor((now - approvedAt) / (1000 * 60 * 60 * 24))
+    );
+    const dailyInterest = (p.amount * MONTHLY_RATE) / DAYS_PER_MONTH;
+    const maxMonths = p.maxMonths || DEFAULT_MAX_MONTHS;
+    const maxInterest = p.amount * MONTHLY_RATE * maxMonths;
+    return sum + Math.min(daysElapsed * dailyInterest, maxInterest);
+  }, 0);
+}
+
+async function buildTreeFromParentId(
+  rootId: string,
+  allUsers: any[],
   currentDepth: number = 0,
-  maxDepth: number = 5
+  maxDepth: number = 20
 ): Promise<UserNode | null> {
   if (currentDepth >= maxDepth) return null;
 
-  const user: any = await User.findById(userId)
-    .select("name mobile email policeStation walletName walletAddress paymentScreenshot referralToken parentId children payments")
-    .lean();
-
+  const user = allUsers.find((u) => u._id.toString() === rootId.toString());
   if (!user) return null;
 
-  // Calculate payment summary
   const payments = user.payments || [];
-  const paymentSummary: UserNode["paymentSummary"] = {
-    totalAmount: payments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0),
-    paymentCount: payments.length,
+  const approvedPayments = payments.filter((p: any) => p.status === "approved");
+  const pendingPayments = payments.filter((p: any) => p.status === "pending");
+
+  const paymentSummary: PaymentSummary = {
+    totalInvested: approvedPayments.reduce(
+      (sum: number, p: any) => sum + (p.amount || 0),
+      0
+    ),
+    approvedCount: approvedPayments.length,
+    pendingCount: pendingPayments.length,
+    totalInterestEarned: calcInterestEarned(payments),
   };
 
-  // Add last payment if exists
-  if (payments.length > 0) {
-    const sortedPayments = [...payments].sort(
-      (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-    const lastPayment = sortedPayments[0];
-    paymentSummary.lastPayment = {
-      amount: lastPayment.amount,
-      date: lastPayment.createdAt.toISOString(),
-      screenshot: lastPayment.screenshot,
-    };
-  }
-
-  // Get children
-  const childIds = user.children || [];
-  const children = await Promise.all(
-    childIds.map(async (childId: any) => {
-      return await getUserTree(childId.toString(), currentDepth + 1, maxDepth);
-    })
+  // Find children by parentId
+  const childUsers = allUsers.filter(
+    (u) => u.parentId && u.parentId.toString() === user._id.toString()
   );
+
+  const children = (
+    await Promise.all(
+      childUsers.map((child) =>
+        buildTreeFromParentId(
+          child._id.toString(),
+          allUsers,
+          currentDepth + 1,
+          maxDepth
+        )
+      )
+    )
+  ).filter((c): c is UserNode => c !== null);
 
   return {
     _id: user._id.toString(),
     name: user.name,
     mobile: user.mobile,
     email: user.email || "",
-    policeStation: user.policeStation || "",
-    walletName: user.walletName || "",
-    walletAddress: user.walletAddress || "",
-    paymentScreenshot: user.paymentScreenshot,
-    referralToken: user.referralToken,
+    userCode: user.userCode || "",
+    referralToken: user.referralToken || "",
     parentId: user.parentId ? user.parentId.toString() : null,
-    children: children.filter((c): c is UserNode => c !== null),
+    children,
     level: currentDepth,
-    paymentSummary
+    paymentSummary,
   };
 }
 
-// GET tree/hierarchy
 export async function GET(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -108,10 +119,9 @@ export async function GET(
     const { id } = await context.params;
     await connectDB();
 
-    // Get token
     const authHeader = req.headers.get("authorization");
     const token = authHeader?.split(" ")[1];
-    
+
     if (!token) {
       return NextResponse.json(
         { success: false, message: "No token provided" },
@@ -119,7 +129,6 @@ export async function GET(
       );
     }
 
-    // Verify token
     const decoded = await verifyToken(token);
     if (!decoded) {
       return NextResponse.json(
@@ -128,15 +137,26 @@ export async function GET(
       );
     }
 
-    // Check if user is viewing their own tree
-    if (decoded.userId !== id) {
+    const SUPER_ADMIN_CODE = "ZENO000";
+
+    const requestingUser = await User.findById(decoded.userId)
+      .select("userCode")
+      .lean() as any;
+    const isAdmin = requestingUser?.userCode === SUPER_ADMIN_CODE;
+
+    if (!isAdmin && decoded.userId !== id) {
       return NextResponse.json(
         { success: false, message: "You can only view your own hierarchy" },
         { status: 403 }
       );
     }
 
-    const tree = await getUserTree(id);
+    // Fetch ALL users in one query
+    const allUsers = await User.find({})
+      .select("name mobile email userCode referralToken parentId children payments maxInvestmentMonths")
+      .lean();
+
+    const tree = await buildTreeFromParentId(id, allUsers);
 
     if (!tree) {
       return NextResponse.json(
@@ -145,10 +165,7 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      data: tree 
-    });
+    return NextResponse.json({ success: true, data: tree });
   } catch (error) {
     console.error("Error fetching user tree:", error);
     return NextResponse.json(

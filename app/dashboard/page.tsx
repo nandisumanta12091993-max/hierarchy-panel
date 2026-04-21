@@ -114,42 +114,29 @@ function getStatusConfig(status: string) {
   }
 }
 
-async function enrichWithPayments(node: any, token: string): Promise<UserNode> {
-  let payments: Payment[] = [];
-  try {
-    const res = await fetch(`/api/users/${node._id}/payments`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      const d = await res.json();
-      payments = d.success ? d.data : [];
-    }
-  } catch {
-    // payment fetch failed — still recurse children
-  }
+// ─── KEY FIX: normalizeTreeNode replaces enrichWithPayments ───────────────────
+// The tree API already has all payment data server-side. No extra fetches needed.
+function normalizeTreeNode(node: any, level: number = 0): UserNode {
+  const ps = node.paymentSummary || {};
 
-  const approved = payments.filter(p => p.status === "approved");
-  const pending  = payments.filter(p => p.status === "pending");
   const paymentSummary: PaymentSummary = {
-    totalInvested:       approved.reduce((s, p) => s + p.amount, 0),
-    approvedCount:       approved.length,
-    pendingCount:        pending.length,
-    totalInterestEarned: approved.reduce((s, p) => s + (p.investmentCalc?.totalInterest || 0), 0),
+    totalInvested:       ps.totalInvested       ?? ps.totalAmount  ?? 0,
+    approvedCount:       ps.approvedCount        ?? ps.paymentCount ?? 0,
+    pendingCount:        ps.pendingCount         ?? 0,
+    totalInterestEarned: ps.totalInterestEarned  ?? 0,
   };
 
-  const children: UserNode[] = node.children?.length
-    ? await Promise.all(
-        node.children
-          .filter((c: any) => c && typeof c === "object" && c._id)
-          .map((c: any) => enrichWithPayments(c, token))
-      )
-    : [];
+  const children: UserNode[] = (node.children || [])
+    .filter((c: any) => c && typeof c === "object" && c._id)
+    .map((c: any) => normalizeTreeNode(c, level + 1));
 
   return {
     ...node,
-    payments,
+    payments: node.payments || [],
     paymentSummary,
     children,
+    level: node.level ?? level,
+    createdAt: node.createdAt || "",
   };
 }
 
@@ -366,9 +353,10 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
       });
       const data = await res.json();
       if (data.success) {
-        const enriched = await enrichWithPayments(data.data, token!);
-        setHierarchyData(enriched);
-        setExpandedNodes(new Set([enriched._id]));
+        // Use normalizeTreeNode — no extra per-user fetches needed
+        const normalized = normalizeTreeNode(data.data);
+        setHierarchyData(normalized);
+        setExpandedNodes(new Set([normalized._id]));
       } else {
         setError(data.message || "Failed to load network");
       }
@@ -491,7 +479,7 @@ function NetworkPanel({ userId, isDarkMode, card }: { userId: string; isDarkMode
   );
 }
 
-// ─── Membership Component ─────────────────────────────────────────────────────────
+// ─── Membership Component ─────────────────────────────────────────────────────
 
 interface LevelStats {
   level: number;
@@ -520,8 +508,9 @@ function Membership({ userId, isDarkMode, card }: { userId: string; isDarkMode: 
       });
       const data = await res.json();
       if (data.success) {
-        const enriched = await enrichWithPayments(data.data, token!);
-        setHierarchyData(enriched);
+        // Use normalizeTreeNode — no extra per-user fetches needed
+        const normalized = normalizeTreeNode(data.data);
+        setHierarchyData(normalized);
       } else {
         setError(data.message || "Failed to load membership data");
       }
@@ -573,7 +562,7 @@ function Membership({ userId, isDarkMode, card }: { userId: string; isDarkMode: 
     const w = name.trim().split(" ");
     return w.length >= 2 ? (w[0][0] + w[w.length - 1][0]).toUpperCase() : name.substring(0, 2).toUpperCase();
   };
-  
+
   const avatarGradients = ["from-purple-500 to-pink-500", "from-blue-500 to-cyan-500", "from-emerald-500 to-teal-500", "from-amber-500 to-orange-500"];
   const getGrad = (name: string) => avatarGradients[name.charCodeAt(0) % avatarGradients.length];
 
@@ -582,13 +571,13 @@ function Membership({ userId, isDarkMode, card }: { userId: string; isDarkMode: 
       <div className="w-10 h-10 border-4 border-t-transparent border-amber-400 rounded-full animate-spin" />
     </div>
   );
-  
+
   if (error) return (
     <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-400 text-sm">
       <AlertCircle className="w-4 h-4 flex-shrink-0" /> {error}
     </div>
   );
-  
+
   if (!hierarchyData) return (
     <div className={`${card} p-12 text-center`}>
       <Users className="w-12 h-12 mx-auto mb-3 text-gray-600" />
@@ -602,14 +591,13 @@ function Membership({ userId, isDarkMode, card }: { userId: string; isDarkMode: 
   const totalInactive = levelStats.reduce((s, l) => s + l.inactiveMembers, 0);
   const totalBusiness = levelStats.reduce((s, l) => s + l.totalBusiness, 0);
 
-  // Level Detail View
   if (selectedLevel) {
     const color = getColor(selectedLevel.level);
     return (
       <div className="space-y-4 max-w-4xl mx-auto">
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setSelectedLevel(null)} 
+          <button
+            onClick={() => setSelectedLevel(null)}
             className={`p-2 rounded-xl flex-shrink-0 ${isDarkMode ? "bg-white/5 hover:bg-white/10" : "bg-gray-100 hover:bg-gray-200"}`}
           >
             <ArrowLeft className="w-4 h-4" />
@@ -737,7 +725,6 @@ function Membership({ userId, isDarkMode, card }: { userId: string; isDarkMode: 
     );
   }
 
-  // Main Membership View - Table Format
   return (
     <div className="space-y-4 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
@@ -749,15 +736,14 @@ function Membership({ userId, isDarkMode, card }: { userId: string; isDarkMode: 
             Network breakdown by level
           </p>
         </div>
-        <button 
-          onClick={fetchStats} 
+        <button
+          onClick={fetchStats}
           className={`px-3 py-2 rounded-xl text-xs md:text-sm font-semibold ${isDarkMode ? "bg-white/5 hover:bg-white/10 text-gray-300" : "bg-gray-100 hover:bg-gray-200 text-gray-700"}`}
         >
           Refresh
         </button>
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
         <div className={`${card} p-3 md:p-4 relative overflow-hidden`}>
           <div className="absolute top-0 right-0 w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 opacity-10 rounded-full -mr-2 -mt-2" />
@@ -801,7 +787,6 @@ function Membership({ userId, isDarkMode, card }: { userId: string; isDarkMode: 
           </p>
         </div>
       ) : (
-        /* Main Membership Table */
         <div className={`${card} overflow-hidden`}>
           <div className={`px-4 py-3 border-b ${isDarkMode ? "border-white/5" : "border-gray-100"} flex items-center justify-between`}>
             <p className="font-bold text-sm">Membership Breakdown by Level</p>
@@ -818,7 +803,7 @@ function Membership({ userId, isDarkMode, card }: { userId: string; isDarkMode: 
                   <th className="px-4 py-3 text-right">Total Business (USDT)</th>
                   <th className="px-4 py-3 text-center hidden sm:table-cell">Active %</th>
                   <th className="px-4 py-3 text-center">Details</th>
-                 </tr>
+                </tr>
               </thead>
               <tbody className={`divide-y ${isDarkMode ? "divide-white/5" : "divide-gray-100"}`}>
                 {levelStats.map(ls => {
@@ -934,7 +919,10 @@ export default function DashboardPage() {
   useEffect(() => {
     const token    = localStorage.getItem("token");
     const userData = localStorage.getItem("user");
-    if (!token || !userData) { window.location.href = "/login"; return; }
+    if (!token || !userData) {
+      window.location.href = "/login";
+      return;
+    }
     try {
       const parsedUser: UserData = JSON.parse(userData);
       setUser(parsedUser);
@@ -1057,12 +1045,17 @@ export default function DashboardPage() {
     } catch { setPasswordMessage({ type: "error", text: "Error updating password" }); }
   };
 
-  const handleLogout        = () => { localStorage.clear(); window.location.href = "/Login"; };
-  const handleCopyCode      = () => {
+  const handleLogout = () => {
+    localStorage.clear();
+    window.location.href = "Login";
+  };
+
+  const handleCopyCode = () => {
     if (!user?.userCode) return;
     navigator.clipboard.writeText(user.userCode);
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   };
+
   const handleCopyShareLink = () => {
     if (!user?.userCode) return;
     const link = `${window.location.origin}/join/${user.userCode}`;

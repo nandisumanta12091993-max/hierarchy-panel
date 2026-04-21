@@ -12,6 +12,15 @@ export default function LoginForm() {
   const [error, setError] = useState("");
   const router = useRouter();
 
+  // ─── FIX: Already logged in? Redirect to dashboard ───────────────────────
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const userData = localStorage.getItem("user");
+    if (token && userData) {
+      router.replace("/dashboard");
+    }
+  }, []);
+
   const texts = ["Intelligent Hierarchy", "From Vision to Execution"];
   const [currentText, setCurrentText] = useState("");
   const [index, setIndex] = useState(0);
@@ -78,7 +87,6 @@ export default function LoginForm() {
           font-family: 'Exo 2', sans-serif;
         }
 
-        /* BG layers */
         .zeno-bg {
           background: #0d0620;
           position: relative;
@@ -108,7 +116,6 @@ export default function LoginForm() {
           pointer-events: none;
         }
 
-        /* Triangle decorations */
         .zeno-tri-tl {
           position: absolute;
           top: 0; left: 0;
@@ -137,7 +144,6 @@ export default function LoginForm() {
           opacity: 0.6;
         }
 
-        /* Orbs */
         .zeno-orb-pink {
           position: absolute;
           width: 400px; height: 400px;
@@ -161,7 +167,6 @@ export default function LoginForm() {
           50% { transform: scale(1.1); opacity: 0.6; }
         }
 
-        /* Left panel text */
         .zeno-brand-name {
           font-family: 'Orbitron', sans-serif;
           font-weight: 900;
@@ -214,13 +219,11 @@ export default function LoginForm() {
         }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
-        /* Form panel */
         .zeno-form-panel {
           background: rgba(13,6,32,0.95);
           border-left: 1px solid rgba(150,50,255,0.15);
         }
 
-        /* Inputs */
         .zeno-input {
           width: 100%;
           background: rgba(45,18,96,0.4);
@@ -241,7 +244,6 @@ export default function LoginForm() {
           box-shadow: 0 0 20px rgba(0,220,200,0.1);
         }
 
-        /* Submit button */
         .zeno-submit-btn {
           width: 100%;
           background: linear-gradient(135deg, #e01e84 0%, #c0186e 100%);
@@ -265,7 +267,6 @@ export default function LoginForm() {
         }
         .zeno-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* Forgot link */
         .zeno-forgot {
           color: #00dcc8;
           font-size: 13px;
@@ -278,7 +279,6 @@ export default function LoginForm() {
         }
         .zeno-forgot:hover { color: #a0f0e8; }
 
-        /* Label */
         .zeno-label {
           display: block;
           font-size: 12px;
@@ -289,7 +289,6 @@ export default function LoginForm() {
           margin-bottom: 8px;
         }
 
-        /* Error box */
         .zeno-error {
           padding: 12px 16px;
           background: rgba(224,30,132,0.08);
@@ -303,7 +302,6 @@ export default function LoginForm() {
           margin-bottom: 1.5rem;
         }
 
-        /* Stat chips */
         .zeno-stats-row {
           display: flex;
           gap: 1.5rem;
@@ -325,7 +323,6 @@ export default function LoginForm() {
           margin-top: 3px;
         }
 
-        /* Input icon */
         .zeno-input-icon {
           position: absolute;
           left: 16px;
@@ -337,7 +334,6 @@ export default function LoginForm() {
       `}</style>
 
       <div className="zeno-login-root h-screen w-screen flex overflow-hidden relative zeno-bg">
-        {/* Global BG effects */}
         <div className="zeno-stripes" />
         <div className="zeno-grid-bg" />
         <div className="zeno-orb-pink" />
@@ -350,12 +346,10 @@ export default function LoginForm() {
           }`}
           style={{ zIndex: isSwapped ? 10 : 1 }}
         >
-          {/* Decorative triangles */}
           <div className="zeno-tri-tl" />
           <div className="zeno-tri-tl-inner" />
           <div className="zeno-tri-br" />
 
-          {/* Background image */}
           <div className="absolute inset-0">
             <img
               src="/images/login.png"
@@ -372,9 +366,7 @@ export default function LoginForm() {
             }}
           />
 
-          {/* Left panel content */}
           <div className="absolute inset-0 flex flex-col justify-between p-12 z-10">
-            {/* Top — logo */}
             <div>
               <div className="zeno-tagline-badge">✦ 14 Years of Excellence</div>
               <div className="zeno-brand-name">
@@ -383,7 +375,6 @@ export default function LoginForm() {
               </div>
             </div>
 
-            {/* Bottom — typewriter */}
             <div>
               <div className="zeno-typewriter">
                 {currentText}
@@ -405,7 +396,6 @@ export default function LoginForm() {
                 .
               </p>
 
-              {/* Stats */}
               <div className="zeno-stats-row">
                 {[
                   { num: "14+", lbl: "Years Active" },
@@ -429,7 +419,6 @@ export default function LoginForm() {
           }`}
           style={{ zIndex: isSwapped ? 1 : 10, position: "relative" }}
         >
-          {/* Subtle right-side orb */}
           <div
             style={{
               position: "absolute",
@@ -454,7 +443,6 @@ export default function LoginForm() {
               zIndex: 1,
             }}
           >
-            {/* Header */}
             <div style={{ marginBottom: "2.5rem" }}>
               <div
                 style={{
@@ -507,7 +495,6 @@ export default function LoginForm() {
               </p>
             </div>
 
-            {/* Error */}
             {error && (
               <div className="zeno-error">
                 <AlertCircle size={18} style={{ flexShrink: 0 }} />
@@ -516,7 +503,6 @@ export default function LoginForm() {
             )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-              {/* User Code */}
               <div>
                 <label className="zeno-label">User Code</label>
                 <div style={{ position: "relative" }}>
@@ -534,7 +520,6 @@ export default function LoginForm() {
                 </div>
               </div>
 
-              {/* Password */}
               <div>
                 <label className="zeno-label">Password</label>
                 <div style={{ position: "relative" }}>
@@ -551,14 +536,12 @@ export default function LoginForm() {
                 </div>
               </div>
 
-              {/* Forgot */}
               <div style={{ textAlign: "right" }}>
                 <Link href="/Secretkey">
                   <button className="zeno-forgot">Forgot Password?</button>
                 </Link>
               </div>
 
-              {/* Divider */}
               <div
                 style={{
                   height: "1px",
@@ -568,7 +551,6 @@ export default function LoginForm() {
                 }}
               />
 
-              {/* Submit */}
               <button
                 onClick={handleSubmit}
                 disabled={loading}
@@ -594,7 +576,6 @@ export default function LoginForm() {
                 )}
               </button>
 
-              {/* Footer note */}
               <p
                 style={{
                   textAlign: "center",
